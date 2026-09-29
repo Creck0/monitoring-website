@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="light">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Masuk - Network Monitoring Diskominfo</title>
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/app.css') }}">
+
+    <style>
+        body {
+            min-height: 100vh;
+            display: grid;
+            grid-template-columns: 1.1fr 1fr;
+        }
+
+        .panel {
+            background: linear-gradient(150deg, #1e3a8a, #2563eb 55%, #7c3aed);
+            color: #fff;
+            padding: 56px 58px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .panel::after {
+            content: "";
+            position: absolute;
+            width: 520px; height: 520px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, .08);
+            right: -170px; bottom: -190px;
+        }
+
+        .panel h2 {
+            font-size: 34px;
+            line-height: 1.2;
+            margin: 0 0 14px;
+            letter-spacing: -.5px;
+        }
+
+        .panel p { opacity: .85; line-height: 1.7; max-width: 420px; }
+
+        .feature-list {
+            margin-top: 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .feature {
+            display: flex; gap: 11px; align-items: flex-start;
+            font-size: 13.5px; opacity: .95;
+        }
+
+        .form-side {
+            display: grid; place-items: center; padding: 30px;
+        }
+
+        .login-card { width: 100%; max-width: 380px; }
+
+        .login-card h1 {
+            font-size: 22px; margin: 0 0 4px; letter-spacing: -.3px;
+        }
+
+        .login-card .sub {
+            color: var(--muted); font-size: 13px; margin-bottom: 26px;
+        }
+
+        .alert {
+            background: var(--danger-soft);
+            color: var(--danger);
+            border-radius: 10px;
+            padding: 10px 13px;
+            font-size: 13px;
+            margin-bottom: 14px;
+            font-weight: 600;
+        }
+
+        .stack { display: flex; flex-direction: column; gap: 14px; }
+
+        @media (max-width: 900px) {
+            body { grid-template-columns: 1fr; }
+            .panel { display: none; }
+        }
+    </style>
+</head>
+
+<body>
+
+<section class="panel">
+    <div class="brand-mark" style="width:46px;height:46px;font-size:17px;
+         background:rgba(255,255,255,.18);margin-bottom:26px">NM</div>
+
+    <h2>Sistem Monitoring<br>Jaringan Diskominfo</h2>
+
+    <p>
+        Pantau kondisi router, switch, dan access point secara terpusat.
+        Sistem menunjukkan lokasi fisik titik gangguan, dugaan penyebabnya,
+        serta saran penanganannya.
+    </p>
+
+    <div class="feature-list">
+        <div class="feature">📍 Lokasi gangguan sampai tingkat ruangan</div>
+        <div class="feature">🎯 Pelacakan hop penyebab perlambatan</div>
+        <div class="feature">🧠 Analisa penyebab &amp; saran otomatis</div>
+        <div class="feature">🖨️ Laporan PDF dan Excel siap cetak</div>
+    </div>
+</section>
+
+<section class="form-side">
+    <div class="login-card">
+        <h1>Selamat datang</h1>
+        <div class="sub">Masuk untuk membuka dashboard monitoring.</div>
+
+        {% if error %}
+        <div class="alert">{{ error }}</div>
+        {% endif %}
+
+        <form method="POST" class="stack">
+            <div class="field">
+                <label>Username</label>
+                <input name="username" autocomplete="username"
+                       autofocus required>
+            </div>
+
+            <div class="field">
+                <label>Password</label>
+                <input type="password" name="password"
+                       autocomplete="current-password" required>
+            </div>
+
+            <button class="btn btn-primary"
+                    style="justify-content:center;padding:11px">
+                Masuk
+            </button>
+        </form>
+
+        <div class="help" style="margin-top:18px">
+            Akun bawaan: <b>admin / admin123</b>. Segera ganti password
+            setelah login pertama.
+        </div>
+    </div>
+</section>
+
+</body>
+</html>

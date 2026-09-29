@@ -1,3253 +1,1052 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="id" data-theme="light">
 
 <head>
-
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Network Monitoring - Diskominfo</title>
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/app.css') }}">
 
-    <title>
-        Network Monitoring - Diskominfo
-    </title>
-
-    <link
-        rel="stylesheet"
-        href="{{ url_for('static', filename='style.css') }}"
-    >
-
-    <style>
-
-        /* =====================================================
-           LATENCY CHART
-        ====================================================== */
-
-        .chart-card {
-            margin-top: 20px;
-            border: 1px solid #e5e7eb;
-            border-radius: 12px;
-            padding: 16px;
-            background: #fff;
-        }
-
-        .chart-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 12px;
-            margin-bottom: 12px;
-        }
-
-        .chart-subtitle {
-            color: #64748b;
-            font-size: 12px;
-            margin-top: 4px;
-        }
-
-        .chart-summary {
-            color: #475569;
-            font-size: 12px;
-            font-weight: 700;
-            background: #f8fafc;
-            padding: 7px 10px;
-            border-radius: 8px;
-        }
-
-        .chart-wrap {
-            width: 100%;
-            height: 280px;
-            position: relative;
-        }
-
-        #latencyChart {
-            width: 100%;
-            height: 100%;
-            display: block;
-        }
-
-        .chart-legend {
-            display: flex;
-            gap: 18px;
-            flex-wrap: wrap;
-            margin-top: 10px;
-            color: #64748b;
-            font-size: 12px;
-        }
-
-        .chart-legend span {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .legend-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            display: inline-block;
-        }
-
-        .legend-dot.online {
-            background: #16a34a;
-        }
-
-        .legend-dot.slow {
-            background: #ea580c;
-        }
-
-        .legend-dot.offline {
-            background: #dc2626;
-        }
-
-        .alert-active {
-            font-weight: 700;
-        }
-
-    </style>
-
+    <script src="{{ url_for('static', filename='vendor/vue.global.prod.js') }}"></script>
+    <script src="{{ url_for('static', filename='vendor/chart.umd.js') }}"></script>
 </head>
-
 
 <body>
 
+{% raw %}
+<div id="app" v-cloak>
+<div class="shell">
 
-<!-- =====================================================
-     HEADER
-====================================================== -->
-
-<header class="topbar">
-
-    <div>
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar" :class="{ open: sidebarOpen }">
 
         <div class="brand">
-            DISKOMINFO
+            <div class="brand-mark">NM</div>
+            <div>
+                <div class="brand-name">NetMonitor</div>
+                <div class="brand-sub">Diskominfo</div>
+            </div>
         </div>
 
-        <div class="subtitle">
-            Network Monitoring Dashboard
-        </div>
+        <div class="nav-label">Pemantauan</div>
 
-    </div>
-
-
-    <div class="monitoring-status">
-
-        <span class="status-dot online-dot"></span>
-
-        <span>
-            Monitoring aktif
-        </span>
-
-        <span id="clock"></span>
-
-    </div>
-
-</header>
-
-
-
-<!-- =====================================================
-     MAIN
-====================================================== -->
-
-<main class="container">
-
-
-    <!-- =================================================
-         TITLE
-    ================================================== -->
-
-    <section class="hero">
-
-        <div>
-
-            <h1>
-                Monitoring Jaringan
-            </h1>
-
-            <p>
-                Pantau kondisi jaringan pada setiap lokasi
-                secara otomatis.
-            </p>
-
-        </div>
-
-
-        <button
-            class="primary-btn"
-            type="button"
-            onclick="openAddModal()"
-        >
-            + Tambah Lokasi
+        <button class="nav-item" :class="{ active: view === 'dashboard' }"
+                @click="view = 'dashboard'">
+            <span>📊</span> Dashboard
         </button>
 
-    </section>
-
-
-
-    <!-- =================================================
-         SUMMARY
-    ================================================== -->
-
-    <section class="summary-grid">
-
-
-        <div class="summary-card">
-
-            <div class="summary-icon online-bg">
-                ✓
-            </div>
-
-            <div>
-
-                <span>
-                    Online
-                </span>
-
-                <strong id="onlineCount">
-                    0
-                </strong>
-
-            </div>
-
-        </div>
-
-
-
-        <div class="summary-card">
-
-            <div class="summary-icon slow-bg">
-                !
-            </div>
-
-            <div>
-
-                <span>
-                    Lambat
-                </span>
-
-                <strong id="slowCount">
-                    0
-                </strong>
-
-            </div>
-
-        </div>
-
-
-
-        <div class="summary-card">
-
-            <div class="summary-icon offline-bg">
-                ×
-            </div>
-
-            <div>
-
-                <span>
-                    Offline
-                </span>
-
-                <strong id="offlineCount">
-                    0
-                </strong>
-
-            </div>
-
-        </div>
-
-
-
-        <div class="summary-card">
-
-            <div class="summary-icon total-bg">
-                #
-            </div>
-
-            <div>
-
-                <span>
-                    Total Lokasi
-                </span>
-
-                <strong id="totalCount">
-                    0
-                </strong>
-
-            </div>
-
-        </div>
-
-
-    </section>
-
-
-
-    <!-- =================================================
-         MONITORING PANEL
-    ================================================== -->
-
-    <section class="panel">
-
-
-        <div class="panel-header">
-
-            <div>
-
-                <h2>
-                    Status Perangkat
-                </h2>
-
-                <p>
-                    Pemeriksaan dilakukan setiap
-                    {{ interval }} detik.
-                </p>
-
-            </div>
-
-
-
-            <div class="toolbar">
-
-
-                <input
-                    id="searchInput"
-                    type="text"
-                    placeholder="Cari lokasi atau IP..."
-                    oninput="renderDevices()"
-                >
-
-
-
-                <select
-                    id="statusFilter"
-                    onchange="renderDevices()"
-                >
-
-                    <option value="ALL">
-                        Semua
-                    </option>
-
-                    <option value="ONLINE">
-                        Online
-                    </option>
-
-                    <option value="SLOW">
-                        Lambat
-                    </option>
-
-                    <option value="OFFLINE">
-                        Offline
-                    </option>
-
-                </select>
-
-
-
-                <button
-                    class="secondary-btn"
-                    type="button"
-                    onclick="loadAll()"
-                >
-                    ↻ Refresh
-                </button>
-
-
-
-                <button
-                    class="secondary-btn"
-                    type="button"
-                    onclick="toggleSound()"
-                    id="soundButton"
-                    aria-pressed="false"
-                >
-                    🔕 Alert Nonaktif
-                </button>
-
-
-            </div>
-
-        </div>
-
-
-
-        <!-- =================================================
-             TABLE
-        ================================================== -->
-
-        <div class="table-container">
-
-            <table>
-
-                <thead>
-
-                    <tr>
-
-                        <th>
-                            Lokasi / Instansi
-                        </th>
-
-                        <th>
-                            IP Address
-                        </th>
-
-                        <th>
-                            Status
-                        </th>
-
-                        <th>
-                            Latency
-                        </th>
-
-                        <th>
-                            Update Terakhir
-                        </th>
-
-                        <th>
-                            Aksi
-                        </th>
-
-                    </tr>
-
-                </thead>
-
-
-                <tbody id="deviceTable">
-
-                </tbody>
-
-            </table>
-
-        </div>
-
-
-
-        <!-- =================================================
-             EMPTY STATE
-        ================================================== -->
-
-        <div
-            id="emptyState"
-            class="empty-state hidden"
-        >
-
-            <div class="empty-icon">
-                ⌁
-            </div>
-
-            <h3>
-                Belum ada lokasi
-            </h3>
-
-            <p>
-                Tambahkan IP yang ingin dimonitor.
-            </p>
-
-            <button
-                class="primary-btn"
-                type="button"
-                onclick="openAddModal()"
-            >
-                + Tambah Lokasi
+        <button class="nav-item" :class="{ active: view === 'spots' }"
+                @click="view = 'spots'">
+            <span>📍</span> Titik Gangguan
+            <span v-if="spots.length" class="badge-count">
+                {{ spots.length }}
+            </span>
+        </button>
+
+        <button class="nav-item" :class="{ active: view === 'devices' }"
+                @click="view = 'devices'">
+            <span>🖧</span> Perangkat
+        </button>
+
+        <button class="nav-item" :class="{ active: view === 'logs' }"
+                @click="view = 'logs'">
+            <span>🧾</span> Riwayat
+        </button>
+
+        <div class="nav-label">Dokumen</div>
+
+        <button class="nav-item" :class="{ active: view === 'report' }"
+                @click="view = 'report'">
+            <span>📑</span> Laporan
+        </button>
+
+        <div class="nav-label">Notifikasi</div>
+
+        <button class="nav-item" :class="{ active: view === 'support' }"
+                @click="view = 'support'">
+            <span>👷</span> Support / Teknisi
+            <span v-if="technicians.length" class="badge-count neutral">
+                {{ technicians.length }}
+            </span>
+        </button>
+
+        <button class="nav-item" :class="{ active: view === 'telegram' }"
+                @click="view = 'telegram'">
+            <span>✈️</span> Notifikasi Telegram
+        </button>
+
+        <div class="sidebar-footer">
+            <button class="nav-item" @click="toggleTheme">
+                <span>{{ theme === 'dark' ? '☀️' : '🌙' }}</span>
+                Mode {{ theme === 'dark' ? 'terang' : 'gelap' }}
             </button>
 
+            <a class="nav-item" href="/logout">
+                <span>⏻</span> Keluar
+            </a>
         </div>
+    </aside>
 
+    <!-- ============ MAIN ============ -->
+    <div class="main">
 
-    </section>
+        <header class="topbar">
+            <button class="btn btn-ghost menu-toggle"
+                    @click="sidebarOpen = !sidebarOpen">☰</button>
 
-</main>
+            <div>
+                <h1>
+                    <span v-if="view === 'dashboard'">Dashboard Monitoring</span>
+                    <span v-else-if="view === 'spots'">Titik Gangguan Jaringan</span>
+                    <span v-else-if="view === 'devices'">Daftar Perangkat</span>
+                    <span v-else-if="view === 'logs'">Riwayat Pemeriksaan</span>
+                    <span v-else-if="view === 'report'">Laporan Monitoring</span>
+                    <span v-else-if="view === 'support'">Support / Teknisi</span>
+                    <span v-else-if="view === 'telegram'">Notifikasi Telegram</span>
+                </h1>
+                <div class="sub">
+                    Pemeriksaan otomatis setiap {{ interval }} detik ·
+                    pembaruan terakhir {{ summary.updated_at || '-' }}
+                </div>
+            </div>
 
+            <div class="spacer"></div>
 
+            <span class="chip"><span class="pulse-dot"></span> Live</span>
 
-<!-- =====================================================
-     MODAL TAMBAH / EDIT
-====================================================== -->
+            <span class="chip">👤 {{ username }}</span>
+        </header>
 
-<div
-    id="deviceModal"
-    class="modal hidden"
->
+        <main class="content">
 
-    <div class="modal-box">
+        <!-- ================= DASHBOARD ================= -->
+        <section v-show="view === 'dashboard'">
 
+            <div class="grid grid-4">
+                <div class="stat">
+                    <div class="stat-label">Total Perangkat</div>
+                    <div class="stat-value">{{ summary.total || 0 }}</div>
+                    <div class="stat-foot">
+                        Kesehatan jaringan {{ healthScore }}%
+                    </div>
+                </div>
 
-        <div class="modal-header">
+                <div class="stat ok">
+                    <div class="stat-label">Normal</div>
+                    <div class="stat-value" style="color:var(--ok)">
+                        {{ summary.online || 0 }}
+                    </div>
+                    <div class="stat-foot">
+                        Latency rata-rata
+                        {{ formatMs(summary.avg_latency) }}
+                    </div>
+                </div>
 
-            <h2 id="deviceModalTitle">
-                Tambah Lokasi
-            </h2>
+                <div class="stat warn">
+                    <div class="stat-label">Lambat</div>
+                    <div class="stat-value" style="color:var(--warn)">
+                        {{ summary.slow || 0 }}
+                    </div>
+                    <div class="stat-foot">Di atas batas wajar</div>
+                </div>
 
+                <div class="stat danger">
+                    <div class="stat-label">Terputus</div>
+                    <div class="stat-value" style="color:var(--danger)">
+                        {{ summary.offline || 0 }}
+                    </div>
+                    <div class="stat-foot">Perlu penanganan</div>
+                </div>
+            </div>
 
-            <button
-                class="close-btn"
-                type="button"
-                onclick="closeDeviceModal()"
-            >
-                ×
-            </button>
+            <div class="card" style="margin-top:18px">
+                <div class="card-head">
+                    <div>
+                        <div class="card-title">Titik gangguan terkini</div>
+                        <div class="card-sub">
+                            Perangkat bermasalah beserta lokasi fisiknya dan
+                            dugaan penyebabnya
+                        </div>
+                    </div>
+                    <div class="spacer"></div>
+                    <button class="btn btn-sm" @click="view = 'spots'">
+                        Lihat semua
+                    </button>
+                </div>
 
-        </div>
+                <div v-if="!spots.length" class="empty">
+                    <div class="empty-icon">✅</div>
+                    Seluruh perangkat dalam kondisi normal.
+                </div>
 
+                <div class="grid grid-2" v-else>
+                    <div v-for="spot in spots.slice(0, 4)" :key="spot.id"
+                         class="hotspot"
+                         :class="{ offline: spot.status === 'OFFLINE' }">
 
+                        <div class="hotspot-head">
+                            <span class="hotspot-name">{{ spot.location }}</span>
+                            <span class="badge" :class="statusClass(spot.status)">
+                                <span class="dot"></span>
+                                {{ statusText(spot.status) }}
+                            </span>
+                        </div>
 
-        <input
-            type="hidden"
-            id="deviceId"
-        >
+                        <div class="hotspot-place">
+                            📍 {{ spot.place }}
+                            <span class="mono">· {{ spot.ip_address }}</span>
+                        </div>
 
+                        <cause-box :title="spot.cause_title"
+                                   :detail="spot.cause_detail"
+                                   :scope="spot.cause_scope"
+                                   :recommendations="spot.recommendations"
+                                   :compact="true"></cause-box>
+                    </div>
+                </div>
+            </div>
 
+            <div class="card">
+                <div class="card-head">
+                    <div>
+                        <div class="card-title">Kondisi per area</div>
+                        <div class="card-sub">
+                            Rekap gedung dan lantai untuk melihat sebaran
+                            gangguan
+                        </div>
+                    </div>
+                </div>
 
-        <label>
-            Nama / Lokasi
-        </label>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>Area / Gedung</th>
+                            <th>Lantai</th>
+                            <th>Perangkat</th>
+                            <th>Normal</th>
+                            <th>Lambat</th>
+                            <th>Terputus</th>
+                            <th>Latency Rata-rata</th>
+                            <th style="min-width:150px">Kesehatan</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr v-for="area in areas" :key="area.area + area.lantai">
+                            <td class="cell-main">{{ area.area }}</td>
+                            <td>{{ area.lantai }}</td>
+                            <td>{{ area.total }}</td>
+                            <td style="color:var(--ok);font-weight:700">
+                                {{ area.online }}
+                            </td>
+                            <td style="color:var(--warn);font-weight:700">
+                                {{ area.slow }}
+                            </td>
+                            <td style="color:var(--danger);font-weight:700">
+                                {{ area.offline }}
+                            </td>
+                            <td>{{ formatMs(area.avg_latency) }}</td>
+                            <td>
+                                <div class="progress">
+                                    <span :style="{
+                                        width: area.health + '%',
+                                        background: area.health > 80
+                                            ? 'var(--ok)'
+                                            : area.health > 50
+                                                ? 'var(--warn)'
+                                                : 'var(--danger)'
+                                    }"></span>
+                                </div>
+                                <div class="cell-sub">{{ area.health }}% normal</div>
+                            </td>
+                        </tr>
+                        <tr v-if="!areas.length">
+                            <td colspan="8" class="empty">
+                                Belum ada data area.
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
 
-        <input
-            type="text"
-            id="locationInput"
-            placeholder="Contoh: Kominfo Malang Selatan"
-        >
+        <!-- ================= TITIK GANGGUAN ================= -->
+        <section v-show="view === 'spots'">
 
+            <div class="card">
+                <div class="card-head">
+                    <div>
+                        <div class="card-title">
+                            Peta titik gangguan ({{ spots.length }})
+                        </div>
+                        <div class="card-sub">
+                            Menjawab "melambatnya di mana": setiap titik
+                            dilengkapi lokasi fisik, perangkat induk, hop
+                            penyebab perlambatan, serta saran penanganan.
+                        </div>
+                    </div>
+                </div>
 
+                <div v-if="!spots.length" class="empty">
+                    <div class="empty-icon">🎉</div>
+                    Tidak ada gangguan yang terdeteksi saat ini.
+                </div>
 
-        <label>
-            IP Address
-        </label>
+                <div v-else style="display:flex;flex-direction:column;gap:14px">
+                    <div v-for="spot in spots" :key="spot.id"
+                         class="hotspot"
+                         :class="{ offline: spot.status === 'OFFLINE' }">
 
-        <input
-            type="text"
-            id="ipInput"
-            placeholder="Contoh: 192.168.1.1"
-        >
+                        <div class="hotspot-head">
+                            <span class="hotspot-name">{{ spot.location }}</span>
+                            <span class="badge" :class="statusClass(spot.status)">
+                                <span class="dot"></span>
+                                {{ statusText(spot.status) }}
+                            </span>
+                            <span class="chip">{{ spot.device_type || '-' }}</span>
+                            <div class="spacer"></div>
+                            <button class="btn btn-sm"
+                                    @click="openDetail(
+                                        devices.find(d => d.id === spot.id)
+                                    )">
+                                Detail & lacak jalur
+                            </button>
+                        </div>
 
+                        <div class="grid grid-3" style="gap:10px">
+                            <div class="chip" style="justify-content:flex-start">
+                                📍 Lokasi: {{ spot.place }}
+                            </div>
+                            <div class="chip" style="justify-content:flex-start">
+                                🌐 IP: <span class="mono">{{ spot.ip_address }}</span>
+                            </div>
+                            <div class="chip" style="justify-content:flex-start">
+                                ⬆️ Induk: {{ spot.parent_location || 'belum diatur' }}
+                            </div>
+                            <div class="chip" style="justify-content:flex-start">
+                                ⏱️ Latency: {{ formatMs(spot.latency) }}
+                            </div>
+                            <div class="chip" style="justify-content:flex-start">
+                                📉 Packet loss: {{ spot.packet_loss ?? 0 }}%
+                            </div>
+                            <div class="chip" style="justify-content:flex-start">
+                                🕐 Dicek: {{ spot.checked_at || '-' }}
+                            </div>
+                        </div>
 
+                        <div v-if="spot.bottleneck_ip" class="cause-box"
+                             style="border-color:var(--danger)">
+                            <div class="cause-title">
+                                🎯 Titik perlambatan pada jalur
+                            </div>
+                            Hop {{ spot.bottleneck_hop }} —
+                            {{ spot.bottleneck_label }}
+                            (<span class="mono">{{ spot.bottleneck_ip }}</span>).
+                            Penanganan sebaiknya dimulai dari perangkat ini.
+                        </div>
 
-        <label>
-            Deskripsi
-        </label>
+                        <cause-box :title="spot.cause_title"
+                                   :detail="spot.cause_detail"
+                                   :scope="spot.cause_scope"
+                                   :recommendations="spot.recommendations">
+                        </cause-box>
+                    </div>
+                </div>
+            </div>
+        </section>
 
-        <textarea
-            id="descriptionInput"
-            placeholder="Keterangan tambahan (opsional)"
-        ></textarea>
+        <!-- ================= PERANGKAT ================= -->
+        <section v-show="view === 'devices'">
 
+            <div class="card">
+                <div class="toolbar">
+                    <div class="search">
+                        <input v-model="search"
+                               placeholder="Cari nama, IP, gedung, ruangan...">
+                    </div>
+                    <div class="spacer"></div>
+                    <button class="btn" @click="refresh(false)">🔄 Muat ulang</button>
+                    <button class="btn btn-primary" @click="openCreate">
+                        + Tambah perangkat
+                    </button>
+                </div>
 
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>Perangkat</th>
+                            <th>Lokasi Fisik</th>
+                            <th>IP Address</th>
+                            <th>Status</th>
+                            <th>Latency</th>
+                            <th>Loss</th>
+                            <th>Induk</th>
+                            <th>Terakhir Dicek</th>
+                            <th style="text-align:right">Aksi</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr v-for="device in filtered" :key="device.id"
+                            :class="{
+                                'row-offline': device.status === 'OFFLINE',
+                                'row-slow': device.status === 'SLOW'
+                            }">
+                            <td>
+                                <div class="cell-main">{{ device.location }}</div>
+                                <div class="cell-sub">
+                                    {{ device.device_type || '-' }}
+                                </div>
+                            </td>
+                            <td>
+                                <div>{{ device.place || '—' }}</div>
+                                <div class="cell-sub"
+                                     v-if="device.description">
+                                    {{ device.description }}
+                                </div>
+                            </td>
+                            <td class="mono">{{ device.ip_address }}</td>
+                            <td>
+                                <span class="badge"
+                                      :class="statusClass(device.status)">
+                                    <span class="dot"></span>
+                                    {{ statusText(device.status) }}
+                                </span>
+                            </td>
+                            <td>{{ formatMs(device.latency) }}</td>
+                            <td>{{ device.packet_loss ?? 0 }}%</td>
+                            <td>{{ device.parent_location || '—' }}</td>
+                            <td class="cell-sub">{{ device.checked_at || '-' }}</td>
+                            <td style="text-align:right;white-space:nowrap">
+                                <button class="btn btn-sm"
+                                        @click="openDetail(device)">Detail</button>
+                                <button class="btn btn-sm"
+                                        @click="openEdit(device)">Ubah</button>
+                                <button class="btn btn-sm btn-danger"
+                                        @click="removeDevice(device)">Hapus</button>
+                            </td>
+                        </tr>
+                        <tr v-if="!filtered.length">
+                            <td colspan="9" class="empty">
+                                <div class="empty-icon">🖥️</div>
+                                Belum ada perangkat yang cocok.
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
 
-        <div class="modal-actions">
+        <!-- ================= RIWAYAT ================= -->
+        <section v-show="view === 'logs'">
+            <div class="card">
+                <div class="toolbar">
+                    <div class="field" style="max-width:220px">
+                        <select v-model="logFilter">
+                            <option value="">Semua status</option>
+                            <option value="ONLINE">Normal</option>
+                            <option value="SLOW">Lambat</option>
+                            <option value="OFFLINE">Terputus</option>
+                        </select>
+                    </div>
+                    <div class="spacer"></div>
+                    <button class="btn" @click="loadLogs">🔄 Muat ulang</button>
+                </div>
 
-            <button
-                class="secondary-btn"
-                type="button"
-                onclick="closeDeviceModal()"
-            >
-                Batal
-            </button>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>Waktu</th>
+                            <th>Perangkat</th>
+                            <th>Lokasi</th>
+                            <th>IP</th>
+                            <th>Status</th>
+                            <th>Latency</th>
+                            <th>Packet Loss</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr v-for="log in logs" :key="log.id">
+                            <td class="mono">{{ log.checked_at }}</td>
+                            <td class="cell-main">{{ log.location }}</td>
+                            <td class="cell-sub">
+                                {{ [log.building, log.floor, log.room]
+                                     .filter(Boolean).join(', ') || '—' }}
+                            </td>
+                            <td class="mono">{{ log.ip_address }}</td>
+                            <td>
+                                <span class="badge"
+                                      :class="statusClass(log.status)">
+                                    <span class="dot"></span>
+                                    {{ statusText(log.status) }}
+                                </span>
+                            </td>
+                            <td>{{ formatMs(log.latency) }}</td>
+                            <td>{{ log.packet_loss ?? 0 }}%</td>
+                        </tr>
+                        <tr v-if="!logs.length">
+                            <td colspan="7" class="empty">Belum ada riwayat.</td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
 
+        <!-- ================= LAPORAN ================= -->
+        <section v-show="view === 'report'">
 
-            <button
-                class="primary-btn"
-                type="button"
-                onclick="saveDevice()"
-            >
-                Simpan
-            </button>
+            <div class="card">
+                <div class="card-head">
+                    <div>
+                        <div class="card-title">Laporan monitoring harian</div>
+                        <div class="card-sub">
+                            Laporan memuat rekap kondisi tiap perangkat,
+                            analisa penyebab gangguan, saran penanganan, dan
+                            kolom tanda tangan.
+                        </div>
+                    </div>
+                </div>
 
-        </div>
-
-
-    </div>
-
-</div>
-
-
-
-<!-- =====================================================
-     MODAL DETAIL
-====================================================== -->
-
-<div
-    id="detailModal"
-    class="modal hidden"
->
-
-    <div class="modal-box detail-box">
-
-
-        <div class="modal-header">
-
-            <h2 id="detailTitle">
-                Detail Lokasi
-            </h2>
-
-
-            <button
-                class="close-btn"
-                type="button"
-                onclick="closeDetailModal()"
-            >
-                ×
-            </button>
-
-        </div>
-
-
-
-        <div id="detailContent">
-
-        </div>
-
-
-
-        <!-- =================================================
-             LATENCY CHART
-        ================================================== -->
-
-        <div class="chart-card">
-
-            <div class="chart-header">
-
-                <div>
-
-                    <strong>
-                        Grafik Latency
-                    </strong>
-
-                    <div class="chart-subtitle">
-                        Riwayat 120 pengecekan terakhir
-                        (±30 menit)
+                <div class="toolbar">
+                    <div class="field">
+                        <label>Tanggal laporan</label>
+                        <input type="date" v-model="reportDate">
                     </div>
 
+                    <div class="spacer"></div>
+
+                    <button class="btn btn-primary" @click="download('pdf')">
+                        🖨️ PDF siap cetak
+                    </button>
+                    <button class="btn" @click="download('xlsx')">
+                        📊 Excel (.xlsx)
+                    </button>
+                    <button class="btn" @click="download('csv')">
+                        📄 CSV
+                    </button>
                 </div>
 
+                <div class="help">
+                    Berkas PDF dibuka di tab baru dalam format A4 landscape
+                    lengkap dengan kop, ringkasan, dan nomor halaman —
+                    tinggal tekan Ctrl+P untuk mencetak. Berkas Excel sudah
+                    berwarna, memiliki filter otomatis, dan terdiri atas dua
+                    lembar: rekap harian serta analisa penyebab.
+                </div>
+            </div>
 
-                <div
-                    id="chartSummary"
-                    class="chart-summary"
-                >
-                    —
+            <div class="card" v-if="reportPreview">
+                <div class="card-head">
+                    <div>
+                        <div class="card-title">
+                            Pratinjau laporan {{ reportPreview.date }}
+                        </div>
+                        <div class="card-sub">
+                            Rata-rata uptime
+                            {{ reportPreview.summary.avg_uptime }}% ·
+                            {{ reportPreview.bermasalah.length }} perangkat
+                            perlu perhatian
+                        </div>
+                    </div>
                 </div>
 
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>Perangkat</th>
+                            <th>Lokasi Fisik</th>
+                            <th>IP</th>
+                            <th>Cek</th>
+                            <th>Uptime</th>
+                            <th>Latency Rata2</th>
+                            <th>Offline</th>
+                            <th>Dugaan Penyebab</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr v-for="row in reportPreview.rows" :key="row.id">
+                            <td class="cell-main">{{ row.location }}</td>
+                            <td>{{ row.place }}</td>
+                            <td class="mono">{{ row.ip_address }}</td>
+                            <td>{{ row.total }}</td>
+                            <td>{{ row.uptime }}%</td>
+                            <td>{{ formatMs(row.avg_latency) }}</td>
+                            <td>{{ row.offline }}</td>
+                            <td class="cell-sub">{{ row.cause_title }}</td>
+                        </tr>
+                        <tr v-if="!reportPreview.rows.length">
+                            <td colspan="8" class="empty">
+                                Tidak ada data pada tanggal ini.
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= SUPPORT / TEKNISI ================= -->
+        <section v-show="view === 'support'">
+
+            <div class="card">
+                <div class="card-head">
+                    <div>
+                        <div class="card-title">Daftar Teknisi</div>
+                        <div class="card-sub">
+                            Teknisi yang dapat dihubungi saat terjadi gangguan.
+                            Kontak mereka ikut dicantumkan pada notifikasi
+                            Telegram.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="field">
+                        <label>Nama teknisi</label>
+                        <input v-model="techForm.name" maxlength="100"
+                               placeholder="Contoh: Budi Santoso"
+                               @keydown.enter="addTechnician">
+                    </div>
+
+                    <div class="field">
+                        <label>IP / Nomor telepon</label>
+                        <input v-model="techForm.contact" maxlength="40"
+                               placeholder="0812-3456-7890 atau 192.168.1.20"
+                               @keydown.enter="addTechnician">
+                    </div>
+
+                    <button class="btn btn-primary" :disabled="techSaving"
+                            @click="addTechnician">+ Tambah</button>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>Nama Teknisi</th>
+                            <th>IP / Nomor Telepon</th>
+                            <th style="width:110px;text-align:right">Aksi</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr v-for="tech in technicians" :key="tech.id">
+                            <td class="cell-main">{{ tech.name }}</td>
+                            <td class="mono">{{ tech.contact }}</td>
+                            <td style="text-align:right">
+                                <button class="btn btn-sm btn-danger"
+                                        @click="removeTechnician(tech)">
+                                    Hapus
+                                </button>
+                            </td>
+                        </tr>
+                        <tr v-if="!technicians.length">
+                            <td colspan="3" class="empty">
+                                <div class="empty-icon">👷</div>
+                                Belum ada teknisi. Tambahkan nama dan IP /
+                                nomor telepon di atas.
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= NOTIFIKASI TELEGRAM ================= -->
+        <section v-show="view === 'telegram'">
+
+            <div class="card">
+                <div class="card-head">
+                    <div>
+                        <div class="card-title">Bot Telegram</div>
+                        <div class="card-sub">
+                            Saat perangkat terputus / mengalami packet loss,
+                            pemberitahuan langsung dikirim ke semua akun di
+                            bawah, lengkap dengan label ruangan dan IP.
+                        </div>
+                    </div>
+
+                    <div class="spacer"></div>
+
+                    <button class="btn" :disabled="!tg"
+                            style="white-space:nowrap;flex-shrink:0"
+                            @click="toggleTelegramNotify">
+                        {{ tg && tg.notify_enabled
+                            ? '🔔 Notifikasi aktif'
+                            : '🔕 Notifikasi nonaktif' }}
+                    </button>
+                </div>
+
+                <div class="tg-status" v-if="tg">
+                    <span v-if="tg.configured" class="badge badge-online">
+                        <span class="dot"></span>
+                        Bot terhubung<template v-if="tg.bot_username">
+                            · @{{ tg.bot_username }}</template>
+                    </span>
+                    <span v-else class="badge badge-slow">
+                        <span class="dot"></span> Token bot belum diisi
+                    </span>
+
+                    <span v-if="tg.configured" class="mono">
+                        {{ tg.token_masked }}
+                    </span>
+
+                    <span class="badge"
+                          :class="tg.notify_enabled ? 'badge-online'
+                                                    : 'badge-unknown'">
+                        <span class="dot"></span>
+                        {{ tg.notify_enabled ? 'Notifikasi aktif'
+                                             : 'Notifikasi dimatikan' }}
+                    </span>
+                </div>
+
+                <div class="help" v-if="tg && tg.repeat_interval"
+                     style="margin-top:10px">
+                    🔁 Pesan dikirim <b>otomatis</b>: langsung saat gangguan
+                    terkonfirmasi, lalu diulang setiap
+                    <b>{{ tg.repeat_interval }} detik</b> selama perangkat
+                    masih terputus, dan sekali lagi saat pulih.
+                </div>
+
+                <div class="form-row" style="margin-top:16px">
+                    <div class="field">
+                        <label>Token bot (dari @BotFather)</label>
+                        <input v-model="tgToken" type="password"
+                               autocomplete="off"
+                               :disabled="tg && tg.token_source === 'env'"
+                               :placeholder="tokenPlaceholder"
+                               @keydown.enter="saveTelegramToken">
+                    </div>
+
+                    <button class="btn btn-primary"
+                            :disabled="tgSaving ||
+                                       (tg && tg.token_source === 'env')"
+                            @click="saveTelegramToken">
+                        Simpan token
+                    </button>
+                </div>
+
+                <div class="help-box">
+                    <b>Cara menghubungkan:</b>
+                    <ol>
+                        <li>
+                            Buka <b>@BotFather</b> di Telegram, kirim
+                            <code>/newbot</code>, lalu salin token yang
+                            diberikan ke kolom di atas.
+                        </li>
+                        <li>
+                            Setiap penerima harus membuka bot tersebut dan
+                            menekan <b>Start</b> (kirim <code>/start</code>).
+                        </li>
+                        <li>
+                            Chat ID pribadi dapat dilihat lewat
+                            <b>@userinfobot</b>. Untuk grup: tambahkan bot ke
+                            grup, kirim satu pesan, lalu buka
+                            <code>api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code>
+                            (ID grup diawali tanda minus).
+                        </li>
+                        <li>
+                            Tambahkan akun di bawah, lalu klik
+                            <b>Kirim tes</b>.
+                        </li>
+                    </ol>
+                </div>
             </div>
 
+            <div class="card">
+                <div class="card-head">
+                    <div>
+                        <div class="card-title">Akun Penerima Notifikasi</div>
+                        <div class="card-sub">
+                            Semua akun di daftar ini menerima setiap
+                            notifikasi gangguan.
+                        </div>
+                    </div>
+                </div>
 
-            <div class="chart-wrap">
+                <div class="form-row">
+                    <div class="field">
+                        <label>Nama akun</label>
+                        <input v-model="tgForm.name" maxlength="100"
+                               placeholder="Contoh: Admin Jaringan"
+                               @keydown.enter="addTelegramAccount">
+                    </div>
 
-                <canvas
-                    id="latencyChart"
-                ></canvas>
+                    <div class="field">
+                        <label>Chat ID Telegram</label>
+                        <input v-model="tgForm.chat_id" maxlength="40"
+                               placeholder="Contoh: 123456789"
+                               @keydown.enter="addTelegramAccount">
+                    </div>
 
+                    <button class="btn btn-primary" :disabled="tgSaving"
+                            @click="addTelegramAccount">+ Tambah akun</button>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>Nama Akun</th>
+                            <th>Chat ID</th>
+                            <th style="width:190px;text-align:right">Aksi</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr v-for="account in tgAccounts" :key="account.id">
+                            <td class="cell-main">{{ account.name }}</td>
+                            <td class="mono">{{ account.chat_id }}</td>
+                            <td style="text-align:right;white-space:nowrap">
+                                <button class="btn btn-sm"
+                                        :disabled="tgTesting === account.id"
+                                        @click="testTelegramAccount(account)">
+                                    {{ tgTesting === account.id
+                                        ? 'Mengirim...' : 'Kirim tes' }}
+                                </button>
+                                <button class="btn btn-sm btn-danger"
+                                        @click="removeTelegramAccount(account)">
+                                    Hapus
+                                </button>
+                            </td>
+                        </tr>
+                        <tr v-if="!tgAccounts.length">
+                            <td colspan="3" class="empty">
+                                <div class="empty-icon">✈️</div>
+                                Belum ada akun penerima. Tambahkan nama dan
+                                Chat ID di atas.
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
+        </section>
 
-
-            <div class="chart-legend">
-
-                <span>
-
-                    <i
-                        class="legend-dot online"
-                    ></i>
-
-                    Online
-
-                </span>
-
-
-                <span>
-
-                    <i
-                        class="legend-dot slow"
-                    ></i>
-
-                    Lambat
-
-                </span>
-
-
-                <span>
-
-                    <i
-                        class="legend-dot offline"
-                    ></i>
-
-                    Offline
-
-                </span>
-
-            </div>
-
-        </div>
-
-
-
-        <h3 class="history-title">
-
-            120 Log Monitoring Terakhir
-            (±30 Menit)
-
-        </h3>
-
-
-
-        <div id="historyList">
-
-        </div>
-
-
+        </main>
     </div>
-
 </div>
 
+<!-- ============ MODAL: FORM PERANGKAT ============ -->
+<div class="overlay" v-if="showForm" @click.self="showForm = false">
+    <div class="modal">
+        <div class="modal-head">
+            <b>{{ editing ? 'Ubah perangkat' : 'Tambah perangkat' }}</b>
+            <div class="spacer"></div>
+            <button class="btn btn-ghost btn-sm"
+                    @click="showForm = false">✕</button>
+        </div>
 
+        <div class="modal-body">
+            <div class="grid grid-2">
+                <div class="field">
+                    <label>Nama perangkat *</label>
+                    <input v-model="form.location"
+                           placeholder="AP Ruang Rapat">
+                </div>
 
-<!-- =====================================================
-     ALERT
-====================================================== -->
+                <div class="field">
+                    <label>IP Address *</label>
+                    <input v-model="form.ip_address"
+                           placeholder="192.168.1.10">
+                </div>
 
-<div
-    id="toast"
-    class="toast"
->
+                <div class="field">
+                    <label>Jenis perangkat</label>
+                    <select v-model="form.device_type">
+                        <option v-for="type in DEVICE_TYPES" :key="type"
+                                :value="type">{{ type }}</option>
+                    </select>
+                </div>
+
+                <div class="field">
+                    <label>Perangkat induk (uplink)</label>
+                    <select v-model="form.parent_id">
+                        <option value="">— tidak ada —</option>
+                        <option v-for="device in parents" :key="device.id"
+                                :value="device.id">
+                            {{ device.location }} ({{ device.ip_address }})
+                        </option>
+                    </select>
+                </div>
+
+                <div class="field">
+                    <label>Gedung / Area</label>
+                    <input v-model="form.building" placeholder="Gedung A">
+                </div>
+
+                <div class="field">
+                    <label>Lantai</label>
+                    <input v-model="form.floor" placeholder="Lantai 2">
+                </div>
+
+                <div class="field">
+                    <label>Ruangan</label>
+                    <input v-model="form.room" placeholder="Ruang Rapat">
+                </div>
+
+                <div class="field">
+                    <label>Keterangan</label>
+                    <input v-model="form.description"
+                           placeholder="Dekat pintu masuk">
+                </div>
+            </div>
+
+            <div class="help" style="margin-top:12px">
+                Mengisi gedung, lantai, ruangan, dan perangkat induk membuat
+                sistem dapat menyebutkan letak gangguan secara tepat dan
+                membedakan masalah satu perangkat dengan masalah satu area.
+            </div>
+        </div>
+
+        <div class="modal-foot">
+            <button class="btn" @click="showForm = false">Batal</button>
+            <button class="btn btn-primary" @click="saveDevice">Simpan</button>
+        </div>
+    </div>
 </div>
 
+<!-- ============ MODAL: DETAIL PERANGKAT ============ -->
+<div class="overlay" v-if="detail" @click.self="closeDetail">
+    <div class="modal wide">
+        <div class="modal-head">
+            <div>
+                <b>{{ detail.location }}</b>
+                <div class="cell-sub">
+                    {{ detail.place || 'Lokasi fisik belum diisi' }} ·
+                    <span class="mono">{{ detail.ip_address }}</span>
+                </div>
+            </div>
+            <div class="spacer"></div>
+            <span class="badge" :class="statusClass(detail.status)">
+                <span class="dot"></span>{{ statusText(detail.status) }}
+            </span>
+            <button class="btn btn-ghost btn-sm" @click="closeDetail">✕</button>
+        </div>
 
+        <div class="modal-body">
 
-<!-- =====================================================
-     JAVASCRIPT
-====================================================== -->
+            <div class="grid grid-4" style="gap:10px;margin-bottom:16px">
+                <div class="chip" style="justify-content:center">
+                    ⏱️ {{ formatMs(detail.latency) }}
+                </div>
+                <div class="chip" style="justify-content:center">
+                    📉 Loss {{ detail.packet_loss ?? 0 }}%
+                </div>
+                <div class="chip" style="justify-content:center">
+                    📶 Jitter {{ formatMs(detail.jitter) }}
+                </div>
+                <div class="chip" style="justify-content:center">
+                    ⬆️ {{ detail.parent_location || 'tanpa induk' }}
+                </div>
+            </div>
+
+            <div class="card-title" style="margin-bottom:8px">
+                Grafik latency
+            </div>
+            <div class="chart-box">
+                <canvas id="latencyChart"></canvas>
+            </div>
+
+            <div class="divider"></div>
+
+            <cause-box v-if="detailDiagnosis"
+                       :title="detailDiagnosis.title"
+                       :detail="detailDiagnosis.detail"
+                       :scope="detailDiagnosis.scope"
+                       :recommendations="detailDiagnosis.recommendations">
+            </cause-box>
+
+            <div class="divider"></div>
+
+            <div style="display:flex;align-items:center;gap:10px">
+                <div>
+                    <div class="card-title">Pelacakan jalur (traceroute)</div>
+                    <div class="card-sub">
+                        Menunjukkan hop mana yang membuat jaringan melambat.
+                    </div>
+                </div>
+                <div class="spacer"></div>
+                <button class="btn btn-primary btn-sm" :disabled="tracing"
+                        @click="runTrace">
+                    {{ tracing ? 'Melacak...' : 'Lacak jalur sekarang' }}
+                </button>
+            </div>
+
+            <div v-if="trace && trace.hops && trace.hops.length"
+                 style="margin-top:14px">
+
+                <div class="cause-box" v-if="trace.conclusion">
+                    {{ trace.conclusion }}
+                </div>
+
+                <div class="hop-list" style="margin-top:12px">
+                    <div v-for="hop in trace.hops" :key="hop.hop"
+                         class="hop"
+                         :class="{ bottleneck:
+                             trace.bottleneck &&
+                             trace.bottleneck.hop === hop.hop }">
+                        <div class="hop-index">{{ hop.hop }}</div>
+                        <div>
+                            <div class="cell-main">{{ hop.label }}</div>
+                            <div class="cell-sub mono">
+                                {{ hop.ip || 'tidak merespons' }}
+                                <span v-if="hop.place"> · {{ hop.place }}</span>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="hop-latency">
+                                {{ hop.latency === null ? '—'
+                                                        : hop.latency + ' ms' }}
+                            </div>
+                            <div class="hop-delta" v-if="hop.delta !== null">
+                                +{{ hop.delta }} ms
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div v-else class="help" style="margin-top:12px">
+                Belum ada hasil pelacakan. Tekan tombol di atas untuk
+                menelusuri jalur menuju perangkat ini.
+            </div>
+        </div>
+
+        <div class="modal-foot">
+            <button class="btn" @click="openEdit(detail)">Ubah data</button>
+            <button class="btn" @click="closeDetail">Tutup</button>
+        </div>
+    </div>
+</div>
+
+<!-- ============ TOAST ============ -->
+<div class="toasts">
+    <div v-for="item in toasts" :key="item.id"
+         class="toast" :class="item.type">
+        {{ item.message }}
+    </div>
+</div>
+
+</div>
+{% endraw %}
 
 <script>
-
-
-// =======================================================
-// VARIABLE
-// =======================================================
-
-let devices = [];
-
-let previousOffline =
-    new Set();
-
-let soundEnabled =
-    false;
-
-let audioContext =
-    null;
-
-let currentDetailLogs =
-    [];
-
-
-
-// =======================================================
-// ESCAPE HTML
-// =======================================================
-
-function escapeHtml(value) {
-
-    return String(
-        value ?? ""
-    )
-
-        .replaceAll(
-            "&",
-            "&amp;"
-        )
-
-        .replaceAll(
-            "<",
-            "&lt;"
-        )
-
-        .replaceAll(
-            ">",
-            "&gt;"
-        )
-
-        .replaceAll(
-            '"',
-            "&quot;"
-        )
-
-        .replaceAll(
-            "'",
-            "&#039;"
-        );
-
-}
-
-
-
-// =======================================================
-// STATUS LABEL
-// =======================================================
-
-function statusLabel(status) {
-
-    if (
-        status === "ONLINE"
-    ) {
-
-        return "Online";
-
-    }
-
-
-    if (
-        status === "SLOW"
-    ) {
-
-        return "Lambat";
-
-    }
-
-
-    if (
-        status === "OFFLINE"
-    ) {
-
-        return "Offline";
-
-    }
-
-
-    return "Belum Dicek";
-
-}
-
-
-
-// =======================================================
-// FORMAT LATENCY
-// =======================================================
-
-function formatLatency(
-    latency
-) {
-
-    if (
-        latency === null ||
-        latency === undefined
-    ) {
-
-        return "—";
-
-    }
-
-
-    return (
-        Number(
-            latency
-        ).toFixed(1)
-        + " ms"
-    );
-
-}
-
-
-
-// =======================================================
-// FORMAT TIME
-// =======================================================
-
-function formatTime(value) {
-
-    if (!value) {
-
-        return "Belum ada data";
-
-    }
-
-
-    return value;
-
-}
-
-
-
-// =======================================================
-// LOAD DEVICES
-// =======================================================
-
-async function loadDevices() {
-
-    try {
-
-        const response =
-            await fetch(
-                "/api/devices"
-            );
-
-
-        devices =
-            await response.json();
-
-
-        checkOfflineAlert();
-
-
-        renderDevices();
-
-
-    } catch (error) {
-
-        console.error(
-            "Gagal mengambil data:",
-            error
-        );
-
-    }
-
-}
-
-
-
-// =======================================================
-// LOAD SUMMARY
-// =======================================================
-
-async function loadSummary() {
-
-    try {
-
-        const response =
-            await fetch(
-                "/api/summary"
-            );
-
-
-        const data =
-            await response.json();
-
-
-        document.getElementById(
-            "onlineCount"
-        ).textContent =
-            data.online;
-
-
-        document.getElementById(
-            "slowCount"
-        ).textContent =
-            data.slow;
-
-
-        document.getElementById(
-            "offlineCount"
-        ).textContent =
-            data.offline;
-
-
-        document.getElementById(
-            "totalCount"
-        ).textContent =
-            data.total;
-
-
-    } catch (error) {
-
-        console.error(
-            "Gagal mengambil summary:",
-            error
-        );
-
-    }
-
-}
-
-
-
-// =======================================================
-// LOAD ALL
-// =======================================================
-
-async function loadAll() {
-
-    await loadDevices();
-
-    await loadSummary();
-
-}
-
-
-
-// =======================================================
-// RENDER DEVICES
-// =======================================================
-
-function renderDevices() {
-
-    const search =
-        document
-            .getElementById(
-                "searchInput"
-            )
-            .value
-            .toLowerCase();
-
-
-    const filter =
-        document
-            .getElementById(
-                "statusFilter"
-            )
-            .value;
-
-
-    const filtered =
-        devices.filter(
-            device => {
-
-                const location =
-                    (
-                        device.location ||
-                        ""
-                    ).toLowerCase();
-
-
-                const ip =
-                    (
-                        device.ip_address ||
-                        ""
-                    ).toLowerCase();
-
-
-                const searchMatch =
-                    location.includes(
-                        search
-                    ) ||
-                    ip.includes(
-                        search
-                    );
-
-
-                const statusMatch =
-                    filter === "ALL" ||
-                    device.status ===
-                        filter;
-
-
-                return (
-                    searchMatch &&
-                    statusMatch
-                );
-
-            }
-        );
-
-
-    const tbody =
-        document.getElementById(
-            "deviceTable"
-        );
-
-
-    const empty =
-        document.getElementById(
-            "emptyState"
-        );
-
-
-    if (
-        filtered.length === 0
-    ) {
-
-        tbody.innerHTML =
-            "";
-
-        empty.classList.remove(
-            "hidden"
-        );
-
-        return;
-
-    }
-
-
-    empty.classList.add(
-        "hidden"
-    );
-
-
-    tbody.innerHTML =
-        filtered
-            .map(
-                device => {
-
-                    let statusClass =
-                        "unknown";
-
-
-                    if (
-                        device.status ===
-                        "ONLINE"
-                    ) {
-
-                        statusClass =
-                            "online";
-
-                    }
-
-                    else if (
-                        device.status ===
-                        "SLOW"
-                    ) {
-
-                        statusClass =
-                            "slow";
-
-                    }
-
-                    else if (
-                        device.status ===
-                        "OFFLINE"
-                    ) {
-
-                        statusClass =
-                            "offline";
-
-                    }
-
-
-                    return `
-
-                        <tr
-                            class="${
-                                device.status ===
-                                "OFFLINE"
-                                    ? "offline-row"
-                                    : ""
-                            }"
-                        >
-
-                            <td>
-
-                                <div
-                                    class="location-name"
-                                >
-
-                                    ${escapeHtml(
-                                        device.location
-                                    )}
-
-                                </div>
-
-
-                                <div
-                                    class="description"
-                                >
-
-                                    ${escapeHtml(
-                                        device.description ||
-                                        ""
-                                    )}
-
-                                </div>
-
-                            </td>
-
-
-                            <td
-                                class="ip-address"
-                            >
-
-                                ${escapeHtml(
-                                    device.ip_address
-                                )}
-
-                            </td>
-
-
-                            <td>
-
-                                <span
-                                    class="
-                                        status-badge
-                                        ${statusClass}
-                                    "
-                                >
-
-                                    <span
-                                        class="small-dot"
-                                    ></span>
-
-                                    ${statusLabel(
-                                        device.status
-                                    )}
-
-                                </span>
-
-                            </td>
-
-
-                            <td>
-
-                                <span
-                                    class="
-                                        latency
-                                        ${statusClass}
-                                    "
-                                >
-
-                                    ${formatLatency(
-                                        device.latency
-                                    )}
-
-                                </span>
-
-                            </td>
-
-
-                            <td>
-
-                                ${formatTime(
-                                    device.checked_at
-                                )}
-
-                            </td>
-
-
-                            <td>
-
-                                <div
-                                    class="action-buttons"
-                                >
-
-                                    <button
-                                        class="icon-btn"
-                                        title="Detail"
-                                        onclick="
-                                            openDetail(
-                                                ${device.id}
-                                            )
-                                        "
-                                    >
-                                        👁
-                                    </button>
-
-
-                                    <button
-                                        class="icon-btn"
-                                        title="Edit"
-                                        onclick="
-                                            openEditModal(
-                                                ${device.id}
-                                            )
-                                        "
-                                    >
-                                        ✎
-                                    </button>
-
-
-                                    <button
-                                        class="
-                                            icon-btn
-                                            delete-btn
-                                        "
-                                        title="Hapus"
-                                        onclick="
-                                            deleteDevice(
-                                                ${device.id}
-                                            )
-                                        "
-                                    >
-                                        🗑
-                                    </button>
-
-                                </div>
-
-                            </td>
-
-                        </tr>
-
-                    `;
-
-                }
-            )
-            .join("");
-
-}
-
-
-
-// =======================================================
-// OPEN ADD
-// =======================================================
-
-function openAddModal() {
-
-    closeAllModals();
-
-
-    document.getElementById(
-        "deviceModalTitle"
-    ).textContent =
-        "Tambah Lokasi";
-
-
-    document.getElementById(
-        "deviceId"
-    ).value =
-        "";
-
-
-    document.getElementById(
-        "locationInput"
-    ).value =
-        "";
-
-
-    document.getElementById(
-        "ipInput"
-    ).value =
-        "";
-
-
-    document.getElementById(
-        "descriptionInput"
-    ).value =
-        "";
-
-
-    document.getElementById(
-        "deviceModal"
-    ).classList.remove(
-        "hidden"
-    );
-
-
-    setTimeout(
-        () => {
-
-            document.getElementById(
-                "locationInput"
-            ).focus();
-
-        },
-        100
-    );
-
-}
-
-
-
-// =======================================================
-// OPEN EDIT
-// =======================================================
-
-function openEditModal(id) {
-
-    const device =
-        devices.find(
-            item =>
-                item.id === id
-        );
-
-
-    if (!device) {
-
-        return;
-
-    }
-
-
-    closeAllModals();
-
-
-    document.getElementById(
-        "deviceModalTitle"
-    ).textContent =
-        "Edit Lokasi";
-
-
-    document.getElementById(
-        "deviceId"
-    ).value =
-        device.id;
-
-
-    document.getElementById(
-        "locationInput"
-    ).value =
-        device.location;
-
-
-    document.getElementById(
-        "ipInput"
-    ).value =
-        device.ip_address;
-
-
-    document.getElementById(
-        "descriptionInput"
-    ).value =
-        device.description || "";
-
-
-    document.getElementById(
-        "deviceModal"
-    ).classList.remove(
-        "hidden"
-    );
-
-}
-
-
-
-// =======================================================
-// CLOSE DEVICE MODAL
-// =======================================================
-
-function closeDeviceModal() {
-
-    document.getElementById(
-        "deviceModal"
-    ).classList.add(
-        "hidden"
-    );
-
-}
-
-
-
-// =======================================================
-// CLOSE DETAIL
-// =======================================================
-
-function closeDetailModal() {
-
-    document.getElementById(
-        "detailModal"
-    ).classList.add(
-        "hidden"
-    );
-
-}
-
-
-
-// =======================================================
-// CLOSE ALL MODALS
-// =======================================================
-
-function closeAllModals() {
-
-    document.getElementById(
-        "deviceModal"
-    ).classList.add(
-        "hidden"
-    );
-
-
-    document.getElementById(
-        "detailModal"
-    ).classList.add(
-        "hidden"
-    );
-
-}
-
-
-
-// =======================================================
-// SAVE DEVICE
-// =======================================================
-
-async function saveDevice() {
-
-    const id =
-        document.getElementById(
-            "deviceId"
-        ).value;
-
-
-    const location =
-        document.getElementById(
-            "locationInput"
-        ).value.trim();
-
-
-    const ipAddress =
-        document.getElementById(
-            "ipInput"
-        ).value.trim();
-
-
-    const description =
-        document.getElementById(
-            "descriptionInput"
-        ).value.trim();
-
-
-    if (!location) {
-
-        showToast(
-            "Nama/lokasi wajib diisi.",
-            "danger"
-        );
-
-        return;
-
-    }
-
-
-    if (!ipAddress) {
-
-        showToast(
-            "IP Address wajib diisi.",
-            "danger"
-        );
-
-        return;
-
-    }
-
-
-    const payload = {
-
-        location:
-            location,
-
-        ip_address:
-            ipAddress,
-
-        description:
-            description
-
+    window.APP_CONFIG = {
+        interval: {{ interval }},
+        username: "{{ username }}",
+        latencyNormal: {{ latency_normal }},
+        latencySlow: {{ latency_slow }}
     };
-
-
-    try {
-
-        const response =
-            await fetch(
-
-                id
-                    ? `/api/devices/${id}`
-                    : "/api/devices",
-
-                {
-
-                    method:
-                        id
-                            ? "PUT"
-                            : "POST",
-
-                    headers: {
-
-                        "Content-Type":
-                            "application/json"
-
-                    },
-
-                    body:
-                        JSON.stringify(
-                            payload
-                        )
-
-                }
-
-            );
-
-
-        const result =
-            await response.json();
-
-
-        if (!response.ok) {
-
-            showToast(
-                result.error ||
-                "Gagal menyimpan.",
-                "danger"
-            );
-
-            return;
-
-        }
-
-
-        closeDeviceModal();
-
-
-        showToast(
-            result.message ||
-            "Data berhasil disimpan.",
-            "success"
-        );
-
-
-        await loadAll();
-
-
-    } catch (error) {
-
-        console.error(
-            error
-        );
-
-
-        showToast(
-            "Terjadi kesalahan.",
-            "danger"
-        );
-
-    }
-
-}
-
-
-
-// =======================================================
-// DELETE
-// =======================================================
-
-async function deleteDevice(id) {
-
-    const device =
-        devices.find(
-            item =>
-                item.id === id
-        );
-
-
-    if (!device) {
-
-        return;
-
-    }
-
-
-    const confirmed =
-        confirm(
-            `Apakah yakin ingin menghapus ${device.location}?`
-        );
-
-
-    if (!confirmed) {
-
-        return;
-
-    }
-
-
-    try {
-
-        const response =
-            await fetch(
-                `/api/devices/${id}`,
-                {
-                    method:
-                        "DELETE"
-                }
-            );
-
-
-        const result =
-            await response.json();
-
-
-        if (!response.ok) {
-
-            showToast(
-                result.error ||
-                "Gagal menghapus.",
-                "danger"
-            );
-
-            return;
-
-        }
-
-
-        showToast(
-            result.message ||
-            "Lokasi berhasil dihapus.",
-            "success"
-        );
-
-
-        await loadAll();
-
-
-    } catch (error) {
-
-        console.error(
-            error
-        );
-
-
-        showToast(
-            "Terjadi kesalahan.",
-            "danger"
-        );
-
-    }
-
-}
-
-
-
-// =======================================================
-// OPEN DETAIL
-// =======================================================
-
-async function openDetail(id) {
-
-    const device =
-        devices.find(
-            item =>
-                item.id === id
-        );
-
-
-    if (!device) {
-
-        return;
-
-    }
-
-
-    closeAllModals();
-
-
-    document.getElementById(
-        "detailTitle"
-    ).textContent =
-        device.location;
-
-
-    document.getElementById(
-        "detailContent"
-    ).innerHTML = `
-
-        <div class="detail-grid">
-
-
-            <div class="detail-item">
-
-                <span>
-                    Lokasi
-                </span>
-
-                <strong>
-                    ${escapeHtml(
-                        device.location
-                    )}
-                </strong>
-
-            </div>
-
-
-
-            <div class="detail-item">
-
-                <span>
-                    IP Address
-                </span>
-
-                <strong>
-                    ${escapeHtml(
-                        device.ip_address
-                    )}
-                </strong>
-
-            </div>
-
-
-
-            <div class="detail-item">
-
-                <span>
-                    Status
-                </span>
-
-                <strong>
-                    ${statusLabel(
-                        device.status
-                    )}
-                </strong>
-
-            </div>
-
-
-
-            <div class="detail-item">
-
-                <span>
-                    Latency
-                </span>
-
-                <strong>
-                    ${formatLatency(
-                        device.latency
-                    )}
-                </strong>
-
-            </div>
-
-
-
-            <div class="detail-item">
-
-                <span>
-                    Update Terakhir
-                </span>
-
-                <strong>
-                    ${formatTime(
-                        device.checked_at
-                    )}
-                </strong>
-
-            </div>
-
-
-
-            <div class="detail-item">
-
-                <span>
-                    Deskripsi
-                </span>
-
-                <strong>
-                    ${escapeHtml(
-                        device.description ||
-                        "Tidak ada deskripsi"
-                    )}
-                </strong>
-
-            </div>
-
-
-        </div>
-
-    `;
-
-
-    try {
-
-        const response =
-            await fetch(
-                `/api/devices/${id}/logs?limit=120`
-            );
-
-
-        const logs =
-            await response.json();
-
-
-        currentDetailLogs =
-            logs;
-
-
-        const history =
-            document.getElementById(
-                "historyList"
-            );
-
-
-        if (
-            !logs.length
-        ) {
-
-            history.innerHTML = `
-
-                <div
-                    class="no-history"
-                >
-
-                    Belum ada log monitoring.
-
-                </div>
-
-            `;
-
-        }
-
-        else {
-
-            history.innerHTML =
-                logs
-                    .map(
-                        log => `
-
-                            <div
-                                class="history-row"
-                            >
-
-                                <span>
-
-                                    ${formatTime(
-                                        log.checked_at
-                                    )}
-
-                                </span>
-
-
-                                <span
-                                    class="
-                                        status-badge
-                                        ${
-                                            log.status ===
-                                            "ONLINE"
-
-                                                ? "online"
-
-                                                : log.status ===
-                                                  "SLOW"
-
-                                                    ? "slow"
-
-                                                    : "offline"
-                                        }
-                                    "
-                                >
-
-                                    ${statusLabel(
-                                        log.status
-                                    )}
-
-                                </span>
-
-
-                                <span>
-
-                                    ${formatLatency(
-                                        log.latency
-                                    )}
-
-                                </span>
-
-                            </div>
-
-                        `
-                    )
-                    .join("");
-
-        }
-
-
-        document.getElementById(
-            "detailModal"
-        ).classList.remove(
-            "hidden"
-        );
-
-
-        // Gambar grafik setelah
-        // modal/detail dibuka.
-        drawLatencyChart(
-            logs
-        );
-
-
-    } catch (error) {
-
-        console.error(
-            error
-        );
-
-
-        showToast(
-            "Gagal mengambil log.",
-            "danger"
-        );
-
-    }
-
-}
-
-
-
-// =======================================================
-// LATENCY CHART
-// =======================================================
-
-function drawLatencyChart(
-    logs
-) {
-
-    const canvas =
-        document.getElementById(
-            "latencyChart"
-        );
-
-
-    const summary =
-        document.getElementById(
-            "chartSummary"
-        );
-
-
-    if (!canvas) {
-
-        return;
-
-    }
-
-
-    const wrapper =
-        canvas.parentElement;
-
-
-    const rect =
-        wrapper.getBoundingClientRect();
-
-
-    const dpr =
-        window.devicePixelRatio ||
-        1;
-
-
-    const width =
-        Math.max(
-            rect.width,
-            320
-        );
-
-
-    const height =
-        Math.max(
-            rect.height,
-            220
-        );
-
-
-    canvas.width =
-        Math.floor(
-            width * dpr
-        );
-
-
-    canvas.height =
-        Math.floor(
-            height * dpr
-        );
-
-
-    canvas.style.width =
-        width + "px";
-
-
-    canvas.style.height =
-        height + "px";
-
-
-    const ctx =
-        canvas.getContext(
-            "2d"
-        );
-
-
-    ctx.setTransform(
-        dpr,
-        0,
-        0,
-        dpr,
-        0,
-        0
-    );
-
-
-    ctx.clearRect(
-        0,
-        0,
-        width,
-        height
-    );
-
-
-    if (
-        !logs ||
-        !logs.length
-    ) {
-
-        ctx.fillStyle =
-            "#64748b";
-
-
-        ctx.font =
-            "14px system-ui, sans-serif";
-
-
-        ctx.textAlign =
-            "center";
-
-
-        ctx.fillText(
-            "Belum ada data untuk grafik.",
-            width / 2,
-            height / 2
-        );
-
-
-        if (summary) {
-
-            summary.textContent =
-                "Belum ada data";
-
-        }
-
-
-        return;
-
-    }
-
-
-    // API mengirim data
-    // terbaru -> terlama.
-    //
-    // Grafik dibalik agar
-    // waktu berjalan dari
-    // kiri -> kanan.
-
-    const points =
-        [
-            ...logs
-        ].reverse();
-
-
-    const valid =
-        points.filter(
-            item =>
-                item.latency !== null &&
-                item.latency !== undefined
-        );
-
-
-    const maxLatency =
-        valid.length
-
-            ? Math.max(
-                100,
-
-                ...valid.map(
-                    item =>
-                        Number(
-                            item.latency
-                        ) || 0
-                )
-            )
-
-            : 100;
-
-
-    const left = 52;
-    const right = 18;
-    const top = 18;
-    const bottom = 42;
-
-
-    const chartWidth =
-        width -
-        left -
-        right;
-
-
-    const chartHeight =
-        height -
-        top -
-        bottom;
-
-
-    // ====================================================
-    // BACKGROUND
-    // ====================================================
-
-    ctx.fillStyle =
-        "#ffffff";
-
-
-    ctx.fillRect(
-        0,
-        0,
-        width,
-        height
-    );
-
-
-    // ====================================================
-    // GRID
-    // ====================================================
-
-    ctx.font =
-        "11px system-ui, sans-serif";
-
-
-    ctx.textAlign =
-        "right";
-
-
-    ctx.textBaseline =
-        "middle";
-
-
-    const gridLines =
-        5;
-
-
-    for (
-        let i = 0;
-        i <= gridLines;
-        i++
-    ) {
-
-        const value =
-            (
-                maxLatency /
-                gridLines
-            ) * i;
-
-
-        const y =
-            top +
-            chartHeight -
-            (
-                value /
-                maxLatency
-            ) *
-            chartHeight;
-
-
-        ctx.strokeStyle =
-            "#e5e7eb";
-
-
-        ctx.lineWidth =
-            1;
-
-
-        ctx.beginPath();
-
-
-        ctx.moveTo(
-            left,
-            y
-        );
-
-
-        ctx.lineTo(
-            width - right,
-            y
-        );
-
-
-        ctx.stroke();
-
-
-        ctx.fillStyle =
-            "#64748b";
-
-
-        ctx.fillText(
-            Math.round(
-                value
-            ) + " ms",
-
-            left - 8,
-
-            y
-        );
-
-    }
-
-
-    // ====================================================
-    // THRESHOLD
-    // ====================================================
-
-    [
-        30,
-        100
-    ].forEach(
-        value => {
-
-            if (
-                value >
-                maxLatency
-            ) {
-
-                return;
-
-            }
-
-
-            const y =
-                top +
-                chartHeight -
-                (
-                    value /
-                    maxLatency
-                ) *
-                chartHeight;
-
-
-            ctx.save();
-
-
-            ctx.setLineDash(
-                [
-                    5,
-                    5
-                ]
-            );
-
-
-            ctx.strokeStyle =
-                value === 30
-                    ? "#16a34a"
-                    : "#ea580c";
-
-
-            ctx.lineWidth =
-                1;
-
-
-            ctx.beginPath();
-
-
-            ctx.moveTo(
-                left,
-                y
-            );
-
-
-            ctx.lineTo(
-                width - right,
-                y
-            );
-
-
-            ctx.stroke();
-
-
-            ctx.restore();
-
-        }
-    );
-
-
-    // ====================================================
-    // POSITION
-    // ====================================================
-
-    function xFor(
-        index
-    ) {
-
-        if (
-            points.length === 1
-        ) {
-
-            return (
-                left +
-                chartWidth / 2
-            );
-
-        }
-
-
-        return (
-            left +
-            (
-                index /
-                (
-                    points.length -
-                    1
-                )
-            ) *
-            chartWidth
-        );
-
-    }
-
-
-    function yFor(
-        latency
-    ) {
-
-        return (
-            top +
-            chartHeight -
-            (
-                Math.min(
-                    Number(
-                        latency
-                    ) || 0,
-
-                    maxLatency
-                ) /
-                maxLatency
-            ) *
-            chartHeight
-        );
-
-    }
-
-
-    // ====================================================
-    // LINE
-    // ====================================================
-
-    for (
-        let i = 1;
-        i < points.length;
-        i++
-    ) {
-
-        const previous =
-            points[
-                i - 1
-            ];
-
-
-        const current =
-            points[
-                i
-            ];
-
-
-        if (
-            previous.latency ==
-                null ||
-
-            current.latency ==
-                null
-        ) {
-
-            continue;
-
-        }
-
-
-        let color =
-            "#16a34a";
-
-
-        if (
-            current.status ===
-            "SLOW"
-        ) {
-
-            color =
-                "#ea580c";
-
-        }
-
-
-        if (
-            current.status ===
-            "OFFLINE"
-        ) {
-
-            color =
-                "#dc2626";
-
-        }
-
-
-        ctx.strokeStyle =
-            color;
-
-
-        ctx.lineWidth =
-            2.2;
-
-
-        ctx.beginPath();
-
-
-        ctx.moveTo(
-            xFor(
-                i - 1
-            ),
-
-            yFor(
-                previous.latency
-            )
-        );
-
-
-        ctx.lineTo(
-            xFor(
-                i
-            ),
-
-            yFor(
-                current.latency
-            )
-        );
-
-
-        ctx.stroke();
-
-    }
-
-
-    // ====================================================
-    // POINT
-    // ====================================================
-
-    points.forEach(
-        (
-            item,
-            index
-        ) => {
-
-            const x =
-                xFor(
-                    index
-                );
-
-
-            // Offline tidak mempunyai
-            // latency sehingga ditaruh
-            // pada bagian bawah grafik.
-
-            if (
-                item.latency ==
-                null
-            ) {
-
-                ctx.fillStyle =
-                    "#dc2626";
-
-
-                ctx.beginPath();
-
-
-                ctx.arc(
-                    x,
-                    top +
-                    chartHeight,
-                    3,
-                    0,
-                    Math.PI * 2
-                );
-
-
-                ctx.fill();
-
-
-                return;
-
-            }
-
-
-            let color =
-                "#16a34a";
-
-
-            if (
-                item.status ===
-                "SLOW"
-            ) {
-
-                color =
-                    "#ea580c";
-
-            }
-
-
-            if (
-                item.status ===
-                "OFFLINE"
-            ) {
-
-                color =
-                    "#dc2626";
-
-            }
-
-
-            ctx.fillStyle =
-                color;
-
-
-            ctx.beginPath();
-
-
-            ctx.arc(
-                x,
-                yFor(
-                    item.latency
-                ),
-                2.8,
-                0,
-                Math.PI * 2
-            );
-
-
-            ctx.fill();
-
-        }
-    );
-
-
-    // ====================================================
-    // TIME LABEL
-    // ====================================================
-
-    ctx.fillStyle =
-        "#64748b";
-
-
-    ctx.font =
-        "10px system-ui, sans-serif";
-
-
-    ctx.textBaseline =
-        "top";
-
-
-    const labels = [
-
-        0,
-
-        Math.floor(
-            (
-                points.length -
-                1
-            ) / 2
-        ),
-
-        points.length - 1
-
-    ];
-
-
-    [
-        ...new Set(
-            labels
-        )
-    ].forEach(
-        index => {
-
-            const item =
-                points[
-                    index
-                ];
-
-
-            if (!item) {
-
-                return;
-
-            }
-
-
-            const x =
-                xFor(
-                    index
-                );
-
-
-            const label =
-                formatTime(
-                    item.checked_at
-                );
-
-
-            ctx.textAlign =
-                index === 0
-
-                    ? "left"
-
-                    : index ===
-                      points.length - 1
-
-                        ? "right"
-
-                        : "center";
-
-
-            ctx.fillText(
-                label,
-                x,
-                top +
-                chartHeight +
-                10
-            );
-
-        }
-    );
-
-
-    // ====================================================
-    // SUMMARY
-    // ====================================================
-
-    const average =
-        valid.length
-
-            ? valid.reduce(
-                (
-                    sum,
-                    item
-                ) =>
-
-                    sum +
-                    Number(
-                        item.latency ||
-                        0
-                    ),
-
-                0
-
-            ) /
-            valid.length
-
-            : null;
-
-
-    if (summary) {
-
-        summary.textContent =
-            average === null
-
-                ? "Tidak ada latency"
-
-                : `Rata-rata ${average.toFixed(1)} ms • ${points.length} log`;
-
-    }
-
-}
-
-
-
-// =======================================================
-// OFFLINE ALERT
-// =======================================================
-
-function checkOfflineAlert() {
-
-    const currentOffline =
-        new Set(
-
-            devices
-
-                .filter(
-                    device =>
-                        device.status ===
-                        "OFFLINE"
-                )
-
-                .map(
-                    device =>
-                        device.id
-                )
-
-        );
-
-
-    currentOffline.forEach(
-        id => {
-
-            if (
-                !previousOffline.has(
-                    id
-                )
-            ) {
-
-                const device =
-                    devices.find(
-                        item =>
-                            item.id === id
-                    );
-
-
-                if (device) {
-
-                    showToast(
-                        `⚠ ${device.location} sedang OFFLINE`,
-                        "danger"
-                    );
-
-
-                    if (
-                        soundEnabled
-                    ) {
-
-                        playAlertSound();
-
-                    }
-
-                }
-
-            }
-
-        }
-    );
-
-
-    previousOffline =
-        currentOffline;
-
-}
-
-
-
-// =======================================================
-// SOUND TOGGLE
-// =======================================================
-
-async function toggleSound() {
-
-    try {
-
-
-        // ================================================
-        // MATIKAN ALERT
-        // ================================================
-
-        if (
-            soundEnabled
-        ) {
-
-            soundEnabled =
-                false;
-
-
-            if (
-                audioContext
-            ) {
-
-                try {
-
-                    await audioContext.suspend();
-
-                }
-
-                catch (error) {
-
-                    console.debug(
-                        "AudioContext sudah tidak aktif.",
-                        error
-                    );
-
-                }
-
-            }
-
-
-            updateSoundButton();
-
-
-            showToast(
-                "Sound alert dinonaktifkan.",
-                "success"
-            );
-
-
-            return;
-
-        }
-
-
-
-        // ================================================
-        // AKTIFKAN ALERT
-        // ================================================
-
-        const AudioCtx =
-            window.AudioContext ||
-            window.webkitAudioContext;
-
-
-        if (!AudioCtx) {
-
-            showToast(
-                "Browser tidak mendukung sound alert.",
-                "danger"
-            );
-
-
-            return;
-
-        }
-
-
-        if (
-            !audioContext
-        ) {
-
-            audioContext =
-                new AudioCtx();
-
-        }
-
-
-        if (
-            audioContext.state ===
-            "suspended"
-        ) {
-
-            await audioContext.resume();
-
-        }
-
-
-        soundEnabled =
-            true;
-
-
-        updateSoundButton();
-
-
-        showToast(
-            "Sound alert berhasil diaktifkan.",
-            "success"
-        );
-
-
-    }
-
-    catch (error) {
-
-        console.error(
-            error
-        );
-
-
-        soundEnabled =
-            false;
-
-
-        updateSoundButton();
-
-
-        showToast(
-            "Sound alert tidak dapat diaktifkan.",
-            "danger"
-        );
-
-    }
-
-}
-
-
-
-// =======================================================
-// UPDATE SOUND BUTTON
-// =======================================================
-
-function updateSoundButton() {
-
-    const button =
-        document.getElementById(
-            "soundButton"
-        );
-
-
-    if (!button) {
-
-        return;
-
-    }
-
-
-    if (
-        soundEnabled
-    ) {
-
-        button.textContent =
-            "🔔 Alert Aktif";
-
-
-        button.setAttribute(
-            "aria-pressed",
-            "true"
-        );
-
-
-        button.classList.add(
-            "alert-active"
-        );
-
-    }
-
-    else {
-
-        button.textContent =
-            "🔕 Alert Nonaktif";
-
-
-        button.setAttribute(
-            "aria-pressed",
-            "false"
-        );
-
-
-        button.classList.remove(
-            "alert-active"
-        );
-
-    }
-
-}
-
-
-
-// =======================================================
-// PLAY SOUND
-// =======================================================
-
-function playAlertSound() {
-
-    if (
-        !soundEnabled ||
-        !audioContext
-    ) {
-
-        return;
-
-    }
-
-
-    if (
-        audioContext.state ===
-        "suspended"
-    ) {
-
-        audioContext.resume();
-
-    }
-
-
-    const oscillator =
-        audioContext.createOscillator();
-
-
-    const gain =
-        audioContext.createGain();
-
-
-    oscillator.connect(
-        gain
-    );
-
-
-    gain.connect(
-        audioContext.destination
-    );
-
-
-    oscillator.frequency.value =
-        800;
-
-
-    oscillator.type =
-        "sine";
-
-
-    gain.gain.setValueAtTime(
-        0.3,
-        audioContext.currentTime
-    );
-
-
-    oscillator.start();
-
-
-    oscillator.stop(
-        audioContext.currentTime +
-        0.5
-    );
-
-}
-
-
-
-// =======================================================
-// TOAST
-// =======================================================
-
-function showToast(
-    message,
-    type
-) {
-
-    const toast =
-        document.getElementById(
-            "toast"
-        );
-
-
-    toast.textContent =
-        message;
-
-
-    toast.className =
-        `toast show ${type}`;
-
-
-    setTimeout(
-        () => {
-
-            toast.className =
-                "toast";
-
-        },
-        4000
-    );
-
-}
-
-
-
-// =======================================================
-// CLOCK
-// =======================================================
-
-function updateClock() {
-
-    const now =
-        new Date();
-
-
-    document.getElementById(
-        "clock"
-    ).textContent =
-        now.toLocaleString(
-            "id-ID"
-        );
-
-}
-
-
-
-// =======================================================
-// RESIZE GRAPH
-// =======================================================
-
-window.addEventListener(
-    "resize",
-    function() {
-
-        const modal =
-            document.getElementById(
-                "detailModal"
-            );
-
-
-        if (
-            modal &&
-            !modal.classList.contains(
-                "hidden"
-            )
-        ) {
-
-            drawLatencyChart(
-                currentDetailLogs
-            );
-
-        }
-
-    }
-);
-
-
-
-// =======================================================
-// CLICK OUTSIDE MODAL
-// =======================================================
-
-document.addEventListener(
-    "click",
-    function(event) {
-
-
-        const deviceModal =
-            document.getElementById(
-                "deviceModal"
-            );
-
-
-        const detailModal =
-            document.getElementById(
-                "detailModal"
-            );
-
-
-        if (
-            event.target ===
-            deviceModal
-        ) {
-
-            closeDeviceModal();
-
-        }
-
-
-        if (
-            event.target ===
-            detailModal
-        ) {
-
-            closeDetailModal();
-
-        }
-
-    }
-);
-
-
-
-// =======================================================
-// ESC KEY
-// =======================================================
-
-document.addEventListener(
-    "keydown",
-    function(event) {
-
-        if (
-            event.key !==
-            "Escape"
-        ) {
-
-            return;
-
-        }
-
-
-        closeAllModals();
-
-    }
-);
-
-
-
-// =======================================================
-// INITIALIZATION
-// =======================================================
-
-updateClock();
-
-updateSoundButton();
-
-
-setInterval(
-    updateClock,
-    1000
-);
-
-
-setInterval(
-    loadAll,
-    {{ interval * 1000 }}
-);
-
-
-loadAll();
-
-
 </script>
 
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
 
 </body>
-
 </html>
