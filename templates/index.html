@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="light">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Network Monitoring - Diskominfo</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/app.css') }}">
+
+    <script src="{{ url_for('static', filename='vendor/vue.global.prod.js') }}"></script>
+    <script src="{{ url_for('static', filename='vendor/chart.umd.js') }}"></script>
+</head>
+
+<body>
+
+{% raw %}
+<div id="app" v-cloak>
+
+<!-- =====================================================
+     HEADER
+====================================================== -->
+<header class="topbar">
+
+    <div class="topbar-main">
+        <div class="topbar-brand">
+            <img class="brand-logo" src="/static/img/logo.png" alt="">
+            <div class="brand-copy">
+                <div class="brand">DISKOMINFO</div>
+                <div class="brand-subline">KABUPATEN MALANG</div>
+                <div class="subtitle">Network Monitoring Dashboard</div>
+            </div>
+        </div>
+
+        <div class="topbar-tools">
+            <div class="monitoring-status">
+                <span class="online-dot"></span>
+                <span>Monitoring aktif</span>
+            </div>
+
+            <span class="user-chip">👤 {{ username }}</span>
+
+            <button class="tool-btn" :class="{ active: alertOn }"
+                    @click="toggleAlert">
+                <span>{{ alertOn ? '🔔' : '🔕' }}</span>
+                <span class="tool-label">
+                    Notifikasi {{ alertOn ? 'aktif' : 'mati' }}
+                </span>
+            </button>
+
+            <button class="tool-btn" @click="toggleTheme">
+                <span>{{ theme === 'dark' ? '☀️' : '🌙' }}</span>
+                <span class="tool-label">
+                    Mode {{ theme === 'dark' ? 'terang' : 'gelap' }}
+                </span>
+            </button>
+
+            <a class="tool-btn" href="/logout">
+                <span>⏻</span>
+                <span class="tool-label">Keluar</span>
+            </a>
+
+            <button class="menu-toggle" aria-label="Menu"
+                    @click="sidebarOpen = !sidebarOpen">☰</button>
+        </div>
+    </div>
+
+    <nav class="topnav" :class="{ open: sidebarOpen }"
+         aria-label="Navigasi utama">
+
+        <button class="topnav-link" :class="{ active: view === 'dashboard' }"
+                @click="view = 'dashboard'">
+            Dashboard
+        </button>
+
+        <button class="topnav-link" :class="{ active: view === 'spots' }"
+                @click="view = 'spots'">
+            Titik Gangguan
+            <span v-if="spots.length" class="badge-count">
+                {{ spots.length }}
+            </span>
+        </button>
+
+        <button class="topnav-link" :class="{ active: view === 'devices' }"
+                @click="view = 'devices'">
+            Perangkat
+        </button>
+
+        <button class="topnav-link" :class="{ active: view === 'logs' }"
+                @click="view = 'logs'">
+            Riwayat
+        </button>
+
+        <span class="nav-divider"></span>
+
+        <button class="topnav-link" :class="{ active: view === 'report' }"
+                @click="view = 'report'">
+            Laporan
+        </button>
+
+        <button class="topnav-link" :class="{ active: view === 'tools' }"
+                @click="view = 'tools'">
+            Konversi Berkas
+        </button>
+    </nav>
+</header>
+
+<!-- =====================================================
+     MAIN
+====================================================== -->
+<main class="container">
+
+    <section class="hero">
+        <div>
+            <h1>
+                <span v-if="view === 'dashboard'">Dashboard Monitoring</span>
+                <span v-else-if="view === 'spots'">Titik Gangguan Jaringan</span>
+                <span v-else-if="view === 'devices'">Daftar Perangkat</span>
+                <span v-else-if="view === 'logs'">Riwayat Pemeriksaan</span>
+                <span v-else-if="view === 'report'">Laporan Monitoring</span>
+                <span v-else>Konversi Berkas</span>
+            </h1>
+            <p>
+                Pemeriksaan otomatis setiap {{ interval }} detik ·
+                pembaruan terakhir {{ summary.updated_at || '-' }}
+            </p>
+        </div>
+
+        <div class="hero-actions" v-if="view === 'devices'">
+            <button class="primary-btn" type="button" @click="openCreate">
+                + Tambah Perangkat
+            </button>
+        </div>
+    </section>
+
+    <!-- ================= DASHBOARD ================= -->
+    <section v-show="view === 'dashboard'">
+
+        <div class="summary-grid">
+            <div class="summary-card">
+                <div class="summary-icon online-bg">✓</div>
+                <div>
+                    <span>Normal</span>
+                    <strong>{{ summary.online || 0 }}</strong>
+                    <small>
+                        Latency rata-rata {{ formatMs(summary.avg_latency) }}
+                    </small>
+                </div>
+            </div>
+
+            <div class="summary-card">
+                <div class="summary-icon slow-bg">!</div>
+                <div>
+                    <span>Lambat</span>
+                    <strong>{{ summary.slow || 0 }}</strong>
+                    <small>Di atas batas wajar</small>
+                </div>
+            </div>
+
+            <div class="summary-card">
+                <div class="summary-icon offline-bg">×</div>
+                <div>
+                    <span>Terputus</span>
+                    <strong>{{ summary.offline || 0 }}</strong>
+                    <small>Perlu penanganan</small>
+                </div>
+            </div>
+
+            <div class="summary-card">
+                <div class="summary-icon total-bg">#</div>
+                <div>
+                    <span>Total Perangkat</span>
+                    <strong>{{ summary.total || 0 }}</strong>
+                    <small>Kesehatan jaringan {{ healthScore }}%</small>
+                </div>
+            </div>
+        </div>
+
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Titik Gangguan Terkini</h2>
+                    <p>
+                        Perangkat bermasalah beserta lokasi fisiknya dan
+                        dugaan penyebabnya.
+                    </p>
+                </div>
+                <button class="secondary-btn" type="button"
+                        @click="view = 'spots'">
+                    Lihat semua
+                </button>
+            </div>
+
+            <div v-if="!spots.length" class="empty-state">
+                <div class="empty-icon">✅</div>
+                <h3>Semua normal</h3>
+                <p>Seluruh perangkat dalam kondisi normal.</p>
+            </div>
+
+            <div class="panel-body" v-else>
+                <div class="grid grid-2">
+                    <div v-for="spot in spots.slice(0, 4)" :key="spot.id"
+                         class="hotspot"
+                         :class="{ offline: spot.status === 'OFFLINE' }">
+
+                        <div class="hotspot-head">
+                            <span class="hotspot-name">{{ spot.location }}</span>
+                            <span class="status-badge"
+                                  :class="statusClass(spot.status)">
+                                <span class="small-dot"></span>
+                                {{ statusText(spot.status) }}
+                            </span>
+                        </div>
+
+                        <div class="hotspot-place">
+                            📍 {{ spot.place }}
+                            <span class="mono">· {{ spot.ip_address }}</span>
+                        </div>
+
+                        <cause-box :title="spot.cause_title"
+                                   :detail="spot.cause_detail"
+                                   :scope="spot.cause_scope"
+                                   :recommendations="spot.recommendations"
+                                   :compact="true"></cause-box>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Kondisi per Area</h2>
+                    <p>
+                        Rekap gedung dan lantai untuk melihat sebaran
+                        gangguan.
+                    </p>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Area / Gedung</th>
+                        <th>Lantai</th>
+                        <th>Perangkat</th>
+                        <th>Normal</th>
+                        <th>Lambat</th>
+                        <th>Terputus</th>
+                        <th>Latency Rata-rata</th>
+                        <th style="min-width:170px">Kesehatan</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr v-for="area in areas" :key="area.area + area.lantai">
+                        <td class="cell-main">{{ area.area }}</td>
+                        <td>{{ area.lantai }}</td>
+                        <td>{{ area.total }}</td>
+                        <td class="text-ok">{{ area.online }}</td>
+                        <td class="text-warn">{{ area.slow }}</td>
+                        <td class="text-danger">{{ area.offline }}</td>
+                        <td>{{ formatMs(area.avg_latency) }}</td>
+                        <td>
+                            <div class="progress">
+                                <span :style="{
+                                    width: area.health + '%',
+                                    background: area.health > 80
+                                        ? '#21a366'
+                                        : area.health > 50
+                                            ? '#ea9a0b'
+                                            : '#dc3c3c'
+                                }"></span>
+                            </div>
+                            <div class="cell-sub">{{ area.health }}% normal</div>
+                        </td>
+                    </tr>
+                    <tr v-if="!areas.length">
+                        <td colspan="8" class="empty">
+                            Belum ada data area.
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </section>
+
+    <!-- ================= TITIK GANGGUAN ================= -->
+    <section v-show="view === 'spots'">
+
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Peta Titik Gangguan ({{ spots.length }})</h2>
+                    <p>
+                        Menjawab "melambatnya di mana": setiap titik
+                        dilengkapi lokasi fisik, perangkat induk, hop
+                        penyebab perlambatan, serta saran penanganan.
+                    </p>
+                </div>
+            </div>
+
+            <div v-if="!spots.length" class="empty-state">
+                <div class="empty-icon">🎉</div>
+                <h3>Tidak ada gangguan</h3>
+                <p>Tidak ada gangguan yang terdeteksi saat ini.</p>
+            </div>
+
+            <div v-else class="panel-body stack-list">
+                <div v-for="spot in spots" :key="spot.id"
+                     class="hotspot"
+                     :class="{ offline: spot.status === 'OFFLINE' }">
+
+                    <div class="hotspot-head">
+                        <span class="hotspot-name">{{ spot.location }}</span>
+                        <span class="status-badge"
+                              :class="statusClass(spot.status)">
+                            <span class="small-dot"></span>
+                            {{ statusText(spot.status) }}
+                        </span>
+                        <span class="chip">{{ spot.device_type || '-' }}</span>
+                        <div class="spacer"></div>
+                        <button class="secondary-btn small-btn"
+                                @click="openDetail(
+                                    devices.find(d => d.id === spot.id)
+                                )">
+                            Detail &amp; lacak jalur
+                        </button>
+                    </div>
+
+                    <div class="info-grid">
+                        <div class="detail-item">
+                            <span>📍 Lokasi</span>
+                            <strong>{{ spot.place }}</strong>
+                        </div>
+                        <div class="detail-item">
+                            <span>🌐 IP Address</span>
+                            <strong class="mono">{{ spot.ip_address }}</strong>
+                        </div>
+                        <div class="detail-item">
+                            <span>⬆️ Induk</span>
+                            <strong>
+                                {{ spot.parent_location || 'belum diatur' }}
+                            </strong>
+                        </div>
+                        <div class="detail-item">
+                            <span>⏱️ Latency</span>
+                            <strong>{{ formatMs(spot.latency) }}</strong>
+                        </div>
+                        <div class="detail-item">
+                            <span>📉 Packet loss</span>
+                            <strong>{{ spot.packet_loss ?? 0 }}%</strong>
+                        </div>
+                        <div class="detail-item">
+                            <span>🕐 Dicek</span>
+                            <strong>{{ spot.checked_at || '-' }}</strong>
+                        </div>
+                    </div>
+
+                    <div v-if="spot.bottleneck_ip" class="cause-box alert">
+                        <div class="cause-title">
+                            🎯 Titik perlambatan pada jalur
+                        </div>
+                        Hop {{ spot.bottleneck_hop }} —
+                        {{ spot.bottleneck_label }}
+                        (<span class="mono">{{ spot.bottleneck_ip }}</span>).
+                        Penanganan sebaiknya dimulai dari perangkat ini.
+                    </div>
+
+                    <cause-box :title="spot.cause_title"
+                               :detail="spot.cause_detail"
+                               :scope="spot.cause_scope"
+                               :recommendations="spot.recommendations">
+                    </cause-box>
+                </div>
+            </div>
+        </section>
+    </section>
+
+    <!-- ================= PERANGKAT ================= -->
+    <section v-show="view === 'devices'">
+
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Status Perangkat</h2>
+                    <p>Pemeriksaan dilakukan setiap {{ interval }} detik.</p>
+                </div>
+
+                <div class="toolbar">
+                    <input type="text" v-model="search"
+                           placeholder="Cari nama, IP, gedung, ruangan...">
+                    <button class="secondary-btn" type="button"
+                            @click="refresh(false)">
+                        ↻ Refresh
+                    </button>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Perangkat</th>
+                        <th>Lokasi Fisik</th>
+                        <th>IP Address</th>
+                        <th>Status</th>
+                        <th>Latency</th>
+                        <th>Loss</th>
+                        <th>Induk</th>
+                        <th>Terakhir Dicek</th>
+                        <th>Aksi</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr v-for="device in filtered" :key="device.id"
+                        :class="{
+                            'row-offline': device.status === 'OFFLINE',
+                            'row-slow': device.status === 'SLOW'
+                        }">
+                        <td>
+                            <div class="location-name">{{ device.location }}</div>
+                            <div class="description">
+                                {{ device.device_type || '-' }}
+                            </div>
+                        </td>
+                        <td>
+                            <div>{{ device.place || '—' }}</div>
+                            <div class="description" v-if="device.description">
+                                {{ device.description }}
+                            </div>
+                        </td>
+                        <td class="mono">{{ device.ip_address }}</td>
+                        <td>
+                            <span class="status-badge"
+                                  :class="statusClass(device.status)">
+                                <span class="small-dot"></span>
+                                {{ statusText(device.status) }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="latency"
+                                  :class="{
+                                      'text-ok': device.status === 'ONLINE',
+                                      'text-warn': device.status === 'SLOW',
+                                      'text-danger': device.status === 'OFFLINE'
+                                  }">
+                                {{ formatMs(device.latency) }}
+                            </span>
+                        </td>
+                        <td>{{ device.packet_loss ?? 0 }}%</td>
+                        <td>{{ device.parent_location || '—' }}</td>
+                        <td>{{ device.checked_at || '-' }}</td>
+                        <td>
+                            <div class="action-buttons">
+                                <button class="icon-btn" title="Detail"
+                                        @click="openDetail(device)">👁</button>
+                                <button class="icon-btn" title="Ubah"
+                                        @click="openEdit(device)">✎</button>
+                                <button class="icon-btn delete-btn" title="Hapus"
+                                        @click="removeDevice(device)">🗑</button>
+                            </div>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div v-if="!filtered.length" class="empty-state">
+                <div class="empty-icon">⌁</div>
+                <h3>Belum ada perangkat</h3>
+                <p>Tidak ada perangkat yang cocok. Tambahkan IP yang ingin dimonitor.</p>
+            </div>
+        </section>
+    </section>
+
+    <!-- ================= RIWAYAT ================= -->
+    <section v-show="view === 'logs'">
+
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Riwayat Pemeriksaan</h2>
+                    <p>150 hasil pemeriksaan terbaru dari seluruh perangkat.</p>
+                </div>
+
+                <div class="toolbar">
+                    <select v-model="logFilter">
+                        <option value="">Semua status</option>
+                        <option value="ONLINE">Normal</option>
+                        <option value="SLOW">Lambat</option>
+                        <option value="OFFLINE">Terputus</option>
+                    </select>
+                    <button class="secondary-btn" type="button"
+                            @click="loadLogs">
+                        ↻ Refresh
+                    </button>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Waktu</th>
+                        <th>Perangkat</th>
+                        <th>Lokasi</th>
+                        <th>IP</th>
+                        <th>Status</th>
+                        <th>Latency</th>
+                        <th>Packet Loss</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr v-for="log in logs" :key="log.id"
+                        :class="{ 'row-offline': log.status === 'OFFLINE' }">
+                        <td class="mono">{{ log.checked_at }}</td>
+                        <td class="location-name">{{ log.location }}</td>
+                        <td class="cell-sub-only">
+                            {{ [log.building, log.floor, log.room]
+                                 .filter(Boolean).join(', ') || '—' }}
+                        </td>
+                        <td class="mono">{{ log.ip_address }}</td>
+                        <td>
+                            <span class="status-badge"
+                                  :class="statusClass(log.status)">
+                                <span class="small-dot"></span>
+                                {{ statusText(log.status) }}
+                            </span>
+                        </td>
+                        <td>{{ formatMs(log.latency) }}</td>
+                        <td>{{ log.packet_loss ?? 0 }}%</td>
+                    </tr>
+                    <tr v-if="!logs.length">
+                        <td colspan="7" class="empty">Belum ada riwayat.</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </section>
+
+    <!-- ================= LAPORAN ================= -->
+    <section v-show="view === 'report'">
+
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Laporan Monitoring Harian</h2>
+                    <p>
+                        Laporan memuat rekap kondisi tiap perangkat,
+                        analisa penyebab gangguan, saran penanganan, dan
+                        kolom tanda tangan.
+                    </p>
+                </div>
+            </div>
+
+            <div class="panel-body">
+                <div class="field-row">
+                    <div class="field">
+                        <label>Tanggal laporan</label>
+                        <input type="date" v-model="reportDate">
+                    </div>
+
+                    <div class="spacer"></div>
+
+                    <button class="primary-btn" type="button"
+                            @click="download('pdf')">
+                        🖨️ PDF siap cetak
+                    </button>
+                    <button class="secondary-btn" type="button"
+                            @click="download('xlsx')">
+                        📊 Excel (.xlsx)
+                    </button>
+                    <button class="secondary-btn" type="button"
+                            @click="download('csv')">
+                        📄 CSV
+                    </button>
+                </div>
+            </div>
+
+            <div class="help help-box">
+                Berkas PDF dibuka di tab baru dalam format A4 landscape
+                lengkap dengan kop, ringkasan, dan nomor halaman —
+                tinggal tekan Ctrl+P untuk mencetak. Berkas Excel sudah
+                berwarna, memiliki filter otomatis, dan terdiri atas dua
+                lembar: rekap harian serta analisa penyebab.
+            </div>
+        </section>
+
+        <section class="panel" v-if="reportPreview">
+            <div class="panel-header">
+                <div>
+                    <h2>Pratinjau Laporan {{ reportPreview.date }}</h2>
+                    <p>
+                        Rata-rata uptime
+                        {{ reportPreview.summary.avg_uptime }}% ·
+                        {{ reportPreview.bermasalah.length }} perangkat
+                        perlu perhatian
+                    </p>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Perangkat</th>
+                        <th>Lokasi Fisik</th>
+                        <th>IP</th>
+                        <th>Cek</th>
+                        <th>Uptime</th>
+                        <th>Latency Rata2</th>
+                        <th>Offline</th>
+                        <th>Dugaan Penyebab</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr v-for="row in reportPreview.rows" :key="row.id">
+                        <td class="cell-main">{{ row.location }}</td>
+                        <td>{{ row.place }}</td>
+                        <td class="mono">{{ row.ip_address }}</td>
+                        <td>{{ row.total }}</td>
+                        <td>{{ row.uptime }}%</td>
+                        <td>{{ formatMs(row.avg_latency) }}</td>
+                        <td>{{ row.offline }}</td>
+                        <td class="cell-sub-only">{{ row.cause_title }}</td>
+                    </tr>
+                    <tr v-if="!reportPreview.rows.length">
+                        <td colspan="8" class="empty">
+                            Tidak ada data pada tanggal ini.
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </section>
+
+    <!-- ================= KONVERSI ================= -->
+    <section v-show="view === 'tools'">
+
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Konversi Berkas Tabel</h2>
+                    <p>
+                        Ubah hasil ekspor CSV menjadi Excel yang rapi, atau
+                        menjadi PDF A4 siap cetak.
+                    </p>
+                </div>
+            </div>
+
+            <div class="panel-body">
+                <div class="dropzone" :class="{ drag: dragging }"
+                     @dragover.prevent="dragging = true"
+                     @dragleave.prevent="dragging = false"
+                     @drop.prevent="dropFile"
+                     @click="$refs.fileInput.click()">
+                    <div class="dz-icon">📥</div>
+                    <div class="dz-title">
+                        {{ convertFile ? convertFile.name
+                                       : 'Letakkan berkas di sini atau klik untuk memilih' }}
+                    </div>
+                    <div class="help" style="margin-top:4px">
+                        Mendukung .csv dan .xlsx (maksimal 10 MB)
+                    </div>
+                    <input type="file" ref="fileInput" style="display:none"
+                           accept=".csv,.xlsx,.xlsm,.txt" @change="pickFile">
+                </div>
+
+                <div class="grid grid-2" style="margin-top:20px">
+                    <div class="field">
+                        <label>Judul dokumen (dipakai pada PDF)</label>
+                        <input v-model="convertTitle"
+                               placeholder="Laporan Monitoring Jaringan">
+                    </div>
+
+                    <div class="field">
+                        <label>Format tujuan</label>
+                        <select v-model="convertTarget">
+                            <option value="xlsx">Excel (.xlsx) — rapi &amp; berwarna</option>
+                            <option value="pdf">PDF A4 — siap cetak</option>
+                            <option value="csv">CSV</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="modal-actions" style="justify-content:flex-start">
+                    <button class="primary-btn" type="button"
+                            :disabled="converting" @click="runConvert">
+                        {{ converting ? 'Memproses...' : 'Konversi sekarang' }}
+                    </button>
+                    <button class="secondary-btn" type="button"
+                            @click="convertFile = null">
+                        Bersihkan
+                    </button>
+                </div>
+            </div>
+        </section>
+    </section>
+
+</main>
+
+<!-- =====================================================
+     MODAL TAMBAH / UBAH PERANGKAT
+====================================================== -->
+<div class="modal" v-if="showForm" @click.self="showForm = false">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h2>{{ editing ? 'Ubah Perangkat' : 'Tambah Perangkat' }}</h2>
+            <button class="close-btn" type="button"
+                    @click="showForm = false">×</button>
+        </div>
+
+        <div class="grid grid-2">
+            <div class="field">
+                <label>Nama perangkat *</label>
+                <input v-model="form.location" placeholder="AP Ruang Rapat">
+            </div>
+
+            <div class="field">
+                <label>IP Address *</label>
+                <input v-model="form.ip_address" placeholder="192.168.1.10">
+            </div>
+
+            <div class="field">
+                <label>Jenis perangkat</label>
+                <select v-model="form.device_type">
+                    <option v-for="type in DEVICE_TYPES" :key="type"
+                            :value="type">{{ type }}</option>
+                </select>
+            </div>
+
+            <div class="field">
+                <label>Perangkat induk (uplink)</label>
+                <select v-model="form.parent_id">
+                    <option value="">— tidak ada —</option>
+                    <option v-for="device in parents" :key="device.id"
+                            :value="device.id">
+                        {{ device.location }} ({{ device.ip_address }})
+                    </option>
+                </select>
+            </div>
+
+            <div class="field">
+                <label>Gedung / Area</label>
+                <input v-model="form.building" placeholder="Gedung A">
+            </div>
+
+            <div class="field">
+                <label>Lantai</label>
+                <input v-model="form.floor" placeholder="Lantai 2">
+            </div>
+
+            <div class="field">
+                <label>Ruangan</label>
+                <input v-model="form.room" placeholder="Ruang Rapat">
+            </div>
+
+            <div class="field">
+                <label>Keterangan</label>
+                <input v-model="form.description"
+                       placeholder="Dekat pintu masuk">
+            </div>
+        </div>
+
+        <div class="help help-box" style="margin:18px 0 0">
+            Mengisi gedung, lantai, ruangan, dan perangkat induk membuat
+            sistem dapat menyebutkan letak gangguan secara tepat dan
+            membedakan masalah satu perangkat dengan masalah satu area.
+        </div>
+
+        <div class="modal-actions">
+            <button class="secondary-btn" type="button"
+                    @click="showForm = false">Batal</button>
+            <button class="primary-btn" type="button"
+                    @click="saveDevice">Simpan</button>
+        </div>
+    </div>
+</div>
+
+<!-- =====================================================
+     MODAL DETAIL PERANGKAT
+====================================================== -->
+<div class="modal" v-if="detail" @click.self="closeDetail">
+    <div class="modal-box wide">
+        <div class="modal-header">
+            <div class="modal-title">
+                <h2>{{ detail.location }}</h2>
+                <span class="status-badge" :class="statusClass(detail.status)">
+                    <span class="small-dot"></span>
+                    {{ statusText(detail.status) }}
+                </span>
+            </div>
+            <button class="close-btn" type="button"
+                    @click="closeDetail">×</button>
+        </div>
+
+        <div class="detail-grid">
+            <div class="detail-item">
+                <span>Lokasi Fisik</span>
+                <strong>{{ detail.place || 'Belum diisi' }}</strong>
+            </div>
+            <div class="detail-item">
+                <span>IP Address</span>
+                <strong class="mono">{{ detail.ip_address }}</strong>
+            </div>
+            <div class="detail-item">
+                <span>Latency</span>
+                <strong>{{ formatMs(detail.latency) }}</strong>
+            </div>
+            <div class="detail-item">
+                <span>Packet Loss</span>
+                <strong>{{ detail.packet_loss ?? 0 }}%</strong>
+            </div>
+            <div class="detail-item">
+                <span>Jitter</span>
+                <strong>{{ formatMs(detail.jitter) }}</strong>
+            </div>
+            <div class="detail-item">
+                <span>Perangkat Induk</span>
+                <strong>{{ detail.parent_location || 'Tanpa induk' }}</strong>
+            </div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-header">
+                <div>
+                    <strong>Grafik Latency</strong>
+                    <div class="chart-subtitle">
+                        Riwayat {{ detailLogs.length }} pengecekan terakhir
+                    </div>
+                </div>
+            </div>
+            <div class="chart-wrap">
+                <canvas id="latencyChart"></canvas>
+            </div>
+            <div class="chart-legend">
+                <span><i class="legend-dot online"></i> Normal</span>
+                <span><i class="legend-dot slow"></i> Lambat</span>
+                <span><i class="legend-dot offline"></i> Terputus</span>
+            </div>
+        </div>
+
+        <cause-box v-if="detailDiagnosis"
+                   :title="detailDiagnosis.title"
+                   :detail="detailDiagnosis.detail"
+                   :scope="detailDiagnosis.scope"
+                   :recommendations="detailDiagnosis.recommendations"
+                   style="display:block;margin-top:20px">
+        </cause-box>
+
+        <div class="section-title">
+            <div>
+                <h3>Pelacakan Jalur (traceroute)</h3>
+                <p>Menunjukkan hop mana yang membuat jaringan melambat.</p>
+            </div>
+            <div class="spacer"></div>
+            <button class="primary-btn small-btn" type="button"
+                    :disabled="tracing" @click="runTrace">
+                {{ tracing ? 'Melacak...' : 'Lacak jalur sekarang' }}
+            </button>
+        </div>
+
+        <div v-if="trace && trace.hops && trace.hops.length"
+             style="margin-top:14px">
+
+            <div class="cause-box" v-if="trace.conclusion"
+                 style="margin-top:0">
+                {{ trace.conclusion }}
+            </div>
+
+            <div class="hop-list" style="margin-top:12px">
+                <div v-for="hop in trace.hops" :key="hop.hop"
+                     class="hop"
+                     :class="{ bottleneck:
+                         trace.bottleneck &&
+                         trace.bottleneck.hop === hop.hop }">
+                    <div class="hop-index">{{ hop.hop }}</div>
+                    <div>
+                        <div class="cell-main">{{ hop.label }}</div>
+                        <div class="cell-sub mono">
+                            {{ hop.ip || 'tidak merespons' }}
+                            <span v-if="hop.place"> · {{ hop.place }}</span>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="hop-latency">
+                            {{ hop.latency === null ? '—'
+                                                    : hop.latency + ' ms' }}
+                        </div>
+                        <div class="hop-delta" v-if="hop.delta !== null">
+                            +{{ hop.delta }} ms
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div v-else class="help" style="margin-top:12px">
+            Belum ada hasil pelacakan. Tekan tombol di atas untuk
+            menelusuri jalur menuju perangkat ini.
+        </div>
+
+        <div class="modal-actions">
+            <button class="secondary-btn" type="button"
+                    @click="openEdit(detail)">Ubah data</button>
+            <button class="secondary-btn" type="button"
+                    @click="closeDetail">Tutup</button>
+        </div>
+    </div>
+</div>
+
+<!-- =====================================================
+     TOAST
+====================================================== -->
+<div class="toasts">
+    <div v-for="item in toasts" :key="item.id"
+         class="toast" :class="item.type">
+        {{ item.message }}
+    </div>
+</div>
+
+</div>
+{% endraw %}
+
+<script>
+    window.APP_CONFIG = {
+        interval: {{ interval }},
+        username: "{{ username }}",
+        latencyNormal: {{ latency_normal }},
+        latencySlow: {{ latency_slow }}
+    };
+</script>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+
+</body>
+</html>

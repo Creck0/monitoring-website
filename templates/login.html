@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="light">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Masuk - Network Monitoring Diskominfo</title>
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/app.css') }}">
+
+    <style>
+        body {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .login-header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            height: 90px;
+            display: flex;
+            align-items: center;
+            padding: 0 40px;
+        }
+
+        .login-main {
+            flex: 1;
+            display: grid;
+            place-items: center;
+            padding: 40px 20px;
+        }
+
+        .login-card {
+            width: 100%;
+            max-width: 440px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 34px 32px 30px;
+        }
+
+        .login-card h1 {
+            margin: 0 0 6px;
+            font-size: 28px;
+        }
+
+        .login-card .lead {
+            margin: 0 0 24px;
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        .alert {
+            background: var(--danger-soft);
+            color: var(--danger);
+            border-radius: 10px;
+            padding: 11px 14px;
+            font-size: 13px;
+            margin-bottom: 16px;
+            font-weight: 700;
+        }
+
+        .stack {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .login-card .primary-btn {
+            width: 100%;
+            padding: 13px;
+            margin-top: 4px;
+        }
+
+        .login-note {
+            margin-top: 20px;
+            padding: 13px 15px;
+            background: var(--surface-2);
+            border-radius: 10px;
+            font-size: 13px;
+            line-height: 1.6;
+            color: var(--muted);
+        }
+
+        .login-footer {
+            text-align: center;
+            padding: 0 20px 28px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        @media (max-width: 650px) {
+            .login-header { padding: 0 20px; }
+            .login-card { padding: 26px 22px; }
+        }
+    </style>
+</head>
+
+<body>
+
+<header class="login-header">
+    <div class="topbar-brand">
+        <img class="brand-logo"
+             src="{{ url_for('static', filename='img/logo.png') }}" alt="">
+        <div class="brand-copy">
+            <div class="brand">DISKOMINFO</div>
+            <div class="brand-subline">KABUPATEN MALANG</div>
+            <div class="subtitle">Network Monitoring Dashboard</div>
+        </div>
+    </div>
+</header>
+
+<main class="login-main">
+    <div class="login-card">
+        <h1>Selamat datang</h1>
+        <p class="lead">Masuk untuk membuka dashboard monitoring jaringan.</p>
+
+        {% if error %}
+        <div class="alert">{{ error }}</div>
+        {% endif %}
+
+        <form method="POST" class="stack">
+            <div class="field">
+                <label>Username</label>
+                <input name="username" autocomplete="username"
+                       autofocus required>
+            </div>
+
+            <div class="field">
+                <label>Password</label>
+                <input type="password" name="password"
+                       autocomplete="current-password" required>
+            </div>
+
+            <button class="primary-btn">Masuk</button>
+        </form>
+
+        <div class="login-note">
+            Akun bawaan: <b>admin / admin123</b>. Segera ganti password
+            setelah login pertama.
+        </div>
+    </div>
+</main>
+
+<div class="login-footer">
+    Sistem Monitoring Jaringan · Diskominfo Kabupaten Malang
+</div>
+
+</body>
+</html>
