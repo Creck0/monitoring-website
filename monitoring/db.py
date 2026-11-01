@@ -18,7 +18,10 @@ BASE_DIR = os.path.dirname(
 DATABASE = os.path.join(BASE_DIR, "monitoring.db")
 
 DEFAULT_ADMIN_USERNAME = "admin"
-DEFAULT_ADMIN_PASSWORD = "admin123"
+# Password awal bisa ditentukan lewat environment variable ADMIN_PASSWORD
+# (dipakai hanya saat akun admin pertama dibuat).
+DEFAULT_ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD") or "admin123"
+USING_DEFAULT_PASSWORD = not os.environ.get("ADMIN_PASSWORD")
 
 
 def current_time():
@@ -170,11 +173,17 @@ def init_database():
         )
         connection.commit()
 
-        print(
-            "[SETUP] Akun admin default dibuat -> "
-            f"{DEFAULT_ADMIN_USERNAME} / {DEFAULT_ADMIN_PASSWORD} "
-            "(segera ganti password ini)."
-        )
+        if USING_DEFAULT_PASSWORD:
+            print(
+                "[SETUP] Akun admin default dibuat -> "
+                f"{DEFAULT_ADMIN_USERNAME} / {DEFAULT_ADMIN_PASSWORD} "
+                "(segera ganti password ini)."
+            )
+        else:
+            print(
+                "[SETUP] Akun admin dibuat dengan password dari "
+                "environment ADMIN_PASSWORD."
+            )
 
     connection.close()
 
