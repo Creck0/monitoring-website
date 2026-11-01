@@ -1088,3 +1088,177 @@ td.empty { padding: 40px 20px; }
     padding-top: 0;
     padding-bottom: 0;
 }
+
+/* =========================================================
+   TEKNISI, HUBUNGI TEKNISI & BOT TELEGRAM
+   ========================================================= */
+
+.icon-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+}
+
+.field-hint {
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.field-hint.bad { color: var(--danger); }
+
+.input-with-btn {
+    display: flex;
+    gap: 8px;
+}
+
+.input-with-btn input { flex: 1; min-width: 0; }
+.input-with-btn .secondary-btn { white-space: nowrap; }
+
+.chat-picks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.chip-btn {
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.chip-btn:hover {
+    background: var(--brand-soft);
+    color: var(--brand);
+}
+
+.check-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 22px 0 4px;
+}
+
+.check {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.check input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: var(--brand);
+    cursor: pointer;
+}
+
+.contact-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.contact-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+}
+
+.wa-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: #198754;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.wa-btn:hover { background: #146c43; }
+
+a.secondary-btn { text-decoration: none; }
+
+@media (max-width: 650px) {
+    .contact-row { flex-direction: column; align-items: flex-start; }
+    .input-with-btn { flex-direction: column; }
+}
+
+.device-summary {
+    background: var(--surface-2);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 18px;
+}
+
+.device-summary .label {
+    color: var(--muted);
+    font-size: 12px;
+    margin-bottom: 8px;
+}
+
+.device-summary-name {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 16px;
+}
+
+.device-summary-meta {
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.tg-result {
+    margin: 4px 0 16px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.tg-result.ok  { background: var(--ok-soft);     color: var(--ok); }
+.tg-result.bad { background: var(--danger-soft); color: var(--danger); }
+
+.chart-empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 20px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.chart-empty.bad { color: var(--danger); }
+
+.chart-note {
+    margin-top: 10px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    background: var(--warn-soft);
+    color: var(--warn);
+    font-size: 12px;
+    line-height: 1.5;
+}
