@@ -16,6 +16,7 @@ import re
 import subprocess
 
 from .db import get_db, current_time
+from .pinger import is_valid_ip
 
 IS_WINDOWS = platform.system().lower() == "windows"
 
@@ -167,6 +168,15 @@ def analyse_hops(hops):
 
 def trace_device(device_id, ip_address):
     """Jalankan traceroute, simpan hasilnya, kembalikan ringkasan."""
+
+    if not is_valid_ip(ip_address):
+        return {
+            "error": (
+                "IP Address perangkat tidak valid, "
+                "jalur tidak dapat dilacak."
+            ),
+            "hops": [],
+        }
 
     try:
         result = subprocess.run(
