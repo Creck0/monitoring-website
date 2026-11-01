@@ -5,6 +5,7 @@ Proses monitoring berkala yang berjalan di latar belakang.
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+from . import notifier
 from .db import get_db, current_time
 from .diagnostics import diagnose, store_diagnosis
 from .pinger import ping_device, determine_status
@@ -24,6 +25,11 @@ def check_device(device_id, ip_address):
 
     connection = get_db()
     cursor = connection.cursor()
+
+    previous = cursor.execute(
+        "SELECT status FROM devices WHERE id = ?", (device_id,)
+    ).fetchone()
+    old_status = previous["status"] if previous else None
 
     cursor.execute(
         """
@@ -64,7 +70,7 @@ def check_device(device_id, ip_address):
     connection.commit()
     connection.close()
 
-    return device_id, status, measurement
+    return device_id, status, measurement, old_status
 
 
 def monitor_all_devices():
@@ -79,6 +85,8 @@ def monitor_all_devices():
     if not devices:
         return
 
+    results = []
+
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
         futures = [
             pool.submit(check_device, device["id"], device["ip_address"])
@@ -87,7 +95,12 @@ def monitor_all_devices():
 
         for future in futures:
             try:
-                future.result()
+                device_id, status, _, old_status = future.result()
+                results.append({
+                    "id": device_id,
+                    "status": status,
+                    "old_status": old_status,
+                })
             except Exception as error:
                 print(f"[MONITOR ERROR] {error}")
 
@@ -106,6 +119,13 @@ def monitor_all_devices():
             print(f"[DIAGNOSA ERROR] {error}")
 
     connection.commit()
+
+    # Kirim notifikasi Telegram untuk perubahan status yang terkonfirmasi
+    try:
+        notifier.process_cycle(connection, results)
+    except Exception as error:
+        print(f"[NOTIFIKASI ERROR] {type(error).__name__}: {error}")
+
     connection.close()
 
 
