@@ -103,17 +103,30 @@ def load_last_result(connection):
         return None
 
 
-DEFAULT_REPEAT_MINUTES = 15
-MAX_REPEAT_MINUTES = 1440
+DEFAULT_REPEAT_SECONDS = 900      # 15 menit
+MAX_REPEAT_SECONDS = 86400        # 24 jam
 
 
 def _parse_repeat(value):
-    """Jeda pengingat (menit). Kosong/rusak -> bawaan; 0 -> mati."""
+    """Jeda pengingat (detik). Kosong/rusak -> bawaan; 0 -> mati."""
     try:
-        minutes = int(str(value).strip())
+        seconds = int(str(value).strip())
     except (TypeError, ValueError):
-        return DEFAULT_REPEAT_MINUTES
-    return min(max(minutes, 0), MAX_REPEAT_MINUTES)
+        return DEFAULT_REPEAT_SECONDS
+    return min(max(seconds, 0), MAX_REPEAT_SECONDS)
+
+
+def _load_repeat_seconds(connection):
+    """Baca jeda pengingat (detik). Mendukung data lama yang tersimpan dalam menit."""
+    raw = get_setting(connection, "telegram_repeat_seconds", "")
+    if str(raw).strip() != "":
+        return _parse_repeat(raw)
+
+    legacy = get_setting(connection, "telegram_repeat_minutes", "")
+    try:
+        return _parse_repeat(int(str(legacy).strip()) * 60)
+    except (TypeError, ValueError):
+        return DEFAULT_REPEAT_SECONDS
 
 
 def load_config(connection):
@@ -137,9 +150,7 @@ def load_config(connection):
         "notify_recovery": get_setting(
             connection, "telegram_notify_recovery", "1"
         ) == "1",
-        "repeat_minutes": _parse_repeat(
-            get_setting(connection, "telegram_repeat_minutes", "")
-        ),
+        "repeat_seconds": _load_repeat_seconds(connection),
         "token_source": source if token else "",
     }
 
@@ -163,7 +174,7 @@ def public_config(connection):
         "chat_id": config["chat_id"],
         "notify_slow": config["notify_slow"],
         "notify_recovery": config["notify_recovery"],
-        "repeat_minutes": config["repeat_minutes"],
+        "repeat_seconds": config["repeat_seconds"],
         "last_result": load_last_result(connection),
     }
 
@@ -182,14 +193,18 @@ def save_config(connection, data):
         return CHAT_ID_ERROR
 
     repeat = None
-    if "repeat_minutes" in data:
-        raw = data.get("repeat_minutes")
+    if "repeat_seconds" in data or "repeat_minutes" in data:
+        # repeat_minutes tetap diterima agar klien lama tidak rusak
+        if "repeat_seconds" in data:
+            raw, factor = data.get("repeat_seconds"), 1
+        else:
+            raw, factor = data.get("repeat_minutes"), 60
         if isinstance(raw, bool) or not str(raw).strip().lstrip("-").isdigit():
-            return "Jeda pengingat harus berupa angka menit."
-        repeat = int(str(raw).strip())
-        if repeat < 0 or repeat > MAX_REPEAT_MINUTES:
+            return "Jeda pengingat harus berupa angka (detik)."
+        repeat = int(str(raw).strip()) * factor
+        if repeat < 0 or repeat > MAX_REPEAT_SECONDS:
             return (
-                f"Jeda pengingat harus antara 0 dan {MAX_REPEAT_MINUTES} menit."
+                f"Jeda pengingat harus antara 0 dan {MAX_REPEAT_SECONDS} detik."
             )
 
     enabled = bool(data.get("enabled"))
@@ -206,7 +221,7 @@ def save_config(connection, data):
         set_setting(connection, "telegram_token", token)
     set_setting(connection, "telegram_chat_id", chat_id)
     if repeat is not None:
-        set_setting(connection, "telegram_repeat_minutes", str(repeat))
+        set_setting(connection, "telegram_repeat_seconds", str(repeat))
     set_setting(connection, "telegram_enabled", "1" if enabled else "0")
     set_setting(
         connection, "telegram_notify_slow",
@@ -668,7 +683,7 @@ def process_cycle(connection, results, now=None):
 
     events, reminders = _track(
         results,
-        repeat_seconds=config["repeat_minutes"] * 60,
+        repeat_seconds=config["repeat_seconds"],
         notify_slow=config["notify_slow"],
         now=now,
     )
