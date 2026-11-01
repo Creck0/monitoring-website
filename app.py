@@ -878,6 +878,7 @@ def test_telegram():
     ok, message = notifier.send_message(
         token, chat_id, notifier.build_test_message()
     )
+    notifier.record_result(ok, message)
     if not ok:
         return jsonify({"error": message}), 400
     return jsonify({"message": "Pesan tes terkirim. Periksa Telegram Anda."})
