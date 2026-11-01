@@ -42,10 +42,11 @@
             <span class="user-chip">👤 {{ username }}</span>
 
             <button class="tool-btn" :class="{ active: alertOn }"
+                    title="Peringatan yang muncul di layar browser ini (bukan Telegram)"
                     @click="toggleAlert">
                 <span>{{ alertOn ? '🔔' : '🔕' }}</span>
                 <span class="tool-label">
-                    Notifikasi {{ alertOn ? 'aktif' : 'mati' }}
+                    Peringatan layar {{ alertOn ? 'aktif' : 'mati' }}
                 </span>
             </button>
 
@@ -103,6 +104,11 @@
                 @click="view = 'tools'">
             Konversi Berkas
         </button>
+
+        <button class="topnav-link" :class="{ active: view === 'settings' }"
+                @click="view = 'settings'">
+            Teknisi &amp; Telegram
+        </button>
     </nav>
 </header>
 
@@ -119,7 +125,8 @@
                 <span v-else-if="view === 'devices'">Daftar Perangkat</span>
                 <span v-else-if="view === 'logs'">Riwayat Pemeriksaan</span>
                 <span v-else-if="view === 'report'">Laporan Monitoring</span>
-                <span v-else>Konversi Berkas</span>
+                <span v-else-if="view === 'tools'">Konversi Berkas</span>
+                <span v-else>Teknisi &amp; Notifikasi Telegram</span>
             </h1>
             <p>
                 Pemeriksaan otomatis setiap {{ interval }} detik ·
@@ -211,6 +218,11 @@
                                 <span class="small-dot"></span>
                                 {{ statusText(spot.status) }}
                             </span>
+                            <div class="spacer"></div>
+                            <button class="secondary-btn small-btn"
+                                    @click="openContact(spot)">
+                                📞 Hubungi teknisi
+                            </button>
                         </div>
 
                         <div class="hotspot-place">
@@ -322,6 +334,10 @@
                         </span>
                         <span class="chip">{{ spot.device_type || '-' }}</span>
                         <div class="spacer"></div>
+                        <button class="secondary-btn small-btn"
+                                @click="openContact(spot)">
+                            📞 Hubungi teknisi
+                        </button>
                         <button class="secondary-btn small-btn"
                                 @click="openDetail(
                                     devices.find(d => d.id === spot.id)
@@ -457,6 +473,8 @@
                             <div class="action-buttons">
                                 <button class="icon-btn" title="Detail"
                                         @click="openDetail(device)">👁</button>
+                                <button class="icon-btn" title="Hubungi Teknisi"
+                                        @click="openContact(device)">📞</button>
                                 <button class="icon-btn" title="Ubah"
                                         @click="openEdit(device)">✎</button>
                                 <button class="icon-btn delete-btn" title="Hapus"
@@ -702,6 +720,199 @@
         </section>
     </section>
 
+    <!-- ================= TEKNISI & TELEGRAM ================= -->
+    <section v-show="view === 'settings'">
+
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Daftar Teknisi</h2>
+                    <p>
+                        Teknisi yang bisa dihubungi langsung lewat WhatsApp
+                        atau telepon saat terjadi gangguan.
+                    </p>
+                </div>
+                <button class="primary-btn" type="button"
+                        @click="openTechCreate">
+                    + Tambah Teknisi
+                </button>
+            </div>
+
+            <div class="table-container" v-if="technicians.length">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Nama</th>
+                        <th>No. HP</th>
+                        <th>Aksi</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr v-for="tech in technicians" :key="tech.id">
+                        <td class="cell-main">{{ tech.name }}</td>
+                        <td class="mono">{{ tech.phone }}</td>
+                        <td>
+                            <div class="action-buttons">
+                                <a class="icon-btn icon-link" title="Chat WhatsApp"
+                                   :href="'https://wa.me/' + tech.wa_number"
+                                   target="_blank" rel="noopener noreferrer">💬</a>
+                                <a class="icon-btn icon-link" title="Telepon"
+                                   :href="telLink(tech)">📞</a>
+                                <button class="icon-btn" title="Ubah"
+                                        @click="openTechEdit(tech)">✎</button>
+                                <button class="icon-btn delete-btn" title="Hapus"
+                                        @click="removeTech(tech)">🗑</button>
+                            </div>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div v-else class="empty-state">
+                <div class="empty-icon">👷</div>
+                <h3>Belum ada teknisi</h3>
+                <p>Tambahkan nama dan nomor HP teknisi agar mudah dihubungi.</p>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Notifikasi Bot Telegram</h2>
+                    <p>
+                        Kirim pemberitahuan otomatis ke Telegram saat
+                        perangkat terputus atau kembali normal.
+                    </p>
+                </div>
+                <span class="status-badge"
+                      :class="tg.enabled ? 'badge-online' : 'badge-unknown'">
+                    <span class="small-dot"></span>
+                    {{ tg.enabled ? 'Aktif' : 'Nonaktif' }}
+                </span>
+            </div>
+
+            <div class="panel-body">
+                <div class="grid grid-2">
+                    <div class="field">
+                        <label>Token bot</label>
+                        <input type="password" v-model="tgForm.token"
+                               autocomplete="new-password" spellcheck="false"
+                               :placeholder="tg.has_token
+                                   ? 'Tersimpan: ' + tg.token_masked
+                                   : '123456789:AAExampleTokenFromBotFather'">
+                        <div class="field-hint">
+                            <template v-if="tg.has_token">
+                                Kosongkan jika tidak ingin mengganti token.
+                                <span v-if="tg.token_source === 'environment'">
+                                    (Token berasal dari variabel lingkungan.)
+                                </span>
+                            </template>
+                            <template v-else>
+                                Didapat dari @BotFather di Telegram.
+                            </template>
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label>Chat ID tujuan</label>
+                        <div class="input-with-btn">
+                            <input v-model="tgForm.chat_id" autocomplete="off"
+                                   spellcheck="false"
+                                   placeholder="123456789 atau -100123456789">
+                            <button class="secondary-btn" type="button"
+                                    :disabled="tgBusy === 'detect' ||
+                                               (!tgForm.token && !tg.has_token)"
+                                    @click="detectChat">
+                                {{ tgBusy === 'detect' ? 'Mencari...' : 'Deteksi' }}
+                            </button>
+                        </div>
+                        <div class="field-hint">
+                            ID pribadi, grup (diawali minus), atau @username kanal.
+                        </div>
+                        <div class="chat-picks" v-if="detectedChats.length">
+                            <button v-for="chat in detectedChats" :key="chat.id"
+                                    type="button" class="chip chip-btn"
+                                    @click="pickChat(chat)">
+                                {{ chat.name }} · {{ chat.id }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="field" style="max-width:380px;margin-top:20px">
+                    <label>Ingatkan ulang selama masih bermasalah</label>
+                    <select v-model.number="tgForm.repeat_seconds">
+                        <option :value="0">Jangan ingatkan (kirim sekali saja)</option>
+                        <option :value="30">Setiap 30 detik</option>
+                        <option :value="40">Setiap 40 detik</option>
+                        <option :value="50">Setiap 50 detik</option>
+                        <option :value="60">Setiap 1 menit</option>
+                        <option :value="300">Setiap 5 menit</option>
+                        <option :value="600">Setiap 10 menit</option>
+                        <option :value="900">Setiap 15 menit</option>
+                        <option :value="1800">Setiap 30 menit</option>
+                        <option :value="3600">Setiap 1 jam</option>
+                    </select>
+                    <div class="field-hint">
+                        Selama perangkat masih terputus, pesan pengingat
+                        dikirim berulang sesuai jeda ini sampai perangkat
+                        kembali normal. Pengiriman mengikuti siklus
+                        pemeriksaan ({{ interval }} detik), jadi jarak
+                        sebenarnya bisa sedikit lebih lama dari yang dipilih.
+                        Jeda sangat pendek membuat chat cepat penuh.
+                    </div>
+                </div>
+
+                <div class="check-list">
+                    <label class="check">
+                        <input type="checkbox" v-model="tgForm.enabled">
+                        <span>Aktifkan notifikasi Telegram</span>
+                    </label>
+                    <label class="check">
+                        <input type="checkbox" v-model="tgForm.notify_recovery">
+                        <span>Kirim juga saat perangkat kembali normal</span>
+                    </label>
+                    <label class="check">
+                        <input type="checkbox" v-model="tgForm.notify_slow">
+                        <span>Kirim juga saat jaringan lambat (bisa sering muncul)</span>
+                    </label>
+                </div>
+
+                <div class="tg-result" v-if="tg.last_result"
+                     :class="tg.last_result.ok ? 'ok' : 'bad'">
+                    {{ tg.last_result.ok
+                        ? '✅ Pengiriman terakhir berhasil'
+                        : '❌ Pengiriman terakhir gagal: ' + tg.last_result.message }}
+                    · {{ tg.last_result.at }}
+                </div>
+
+                <div class="modal-actions" style="justify-content:flex-start">
+                    <button class="primary-btn" type="button"
+                            :disabled="tgBusy === 'save'" @click="saveTelegram">
+                        {{ tgBusy === 'save' ? 'Menyimpan...' : 'Simpan pengaturan' }}
+                    </button>
+                    <button class="secondary-btn" type="button"
+                            :disabled="tgBusy === 'test'" @click="testTelegram">
+                        {{ tgBusy === 'test' ? 'Mengirim...' : '✈️ Kirim pesan tes' }}
+                    </button>
+                </div>
+            </div>
+
+            <div class="help help-box">
+                <b>Cara menyiapkan:</b>
+                1) Di Telegram buka @BotFather, kirim /newbot, lalu salin token
+                yang diberikan. 2) Buka bot Anda dan tekan Start (atau masukkan
+                bot ke grup). 3) Tempel token di atas lalu klik Deteksi untuk
+                mengisi Chat ID otomatis. 4) Klik Kirim pesan tes, kemudian
+                aktifkan dan simpan. Notifikasi baru dikirim bila perubahan
+                status bertahan selama 2 pemeriksaan berturut-turut, agar
+                gangguan sesaat tidak membanjiri chat. Selama perangkat masih bermasalah,
+                pengingat dikirim ulang sesuai jeda yang Anda pilih.
+            </div>
+        </section>
+    </section>
+
 </main>
 
 <!-- =====================================================
@@ -783,6 +994,49 @@
 </div>
 
 <!-- =====================================================
+     MODAL TAMBAH / UBAH TEKNISI
+====================================================== -->
+<div class="modal" v-if="showTechForm" @click.self="showTechForm = false">
+    <div class="modal-box" style="max-width:480px">
+        <div class="modal-header">
+            <h2>{{ editingTech ? 'Ubah Teknisi' : 'Tambah Teknisi' }}</h2>
+            <button class="close-btn" type="button"
+                    @click="showTechForm = false">×</button>
+        </div>
+
+        <div class="stack-list">
+            <div class="field">
+                <label>Nama teknisi *</label>
+                <input v-model="techForm.name" maxlength="60"
+                       placeholder="Budi Santoso" autocomplete="off"
+                       @keyup.enter="saveTech">
+            </div>
+
+            <div class="field">
+                <label>No. HP *</label>
+                <input v-model="techForm.phone" type="tel"
+                       inputmode="numeric" pattern="[0-9]*" maxlength="15"
+                       autocomplete="off" placeholder="081234567890"
+                       @keydown="onlyDigitsKey" @input="sanitizePhone"
+                       @keyup.enter="saveTech">
+                <div class="field-hint"
+                     :class="{ bad: techForm.phone && techForm.phone.length < 9 }">
+                    {{ phoneHint }}
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-actions">
+            <button class="secondary-btn" type="button"
+                    @click="showTechForm = false">Batal</button>
+            <button class="primary-btn" type="button"
+                    :disabled="!techFormValid || savingTech"
+                    @click="saveTech">Simpan</button>
+        </div>
+    </div>
+</div>
+
+<!-- =====================================================
      MODAL DETAIL PERANGKAT
 ====================================================== -->
 <div class="modal" v-if="detail" @click.self="closeDetail">
@@ -836,7 +1090,25 @@
                 </div>
             </div>
             <div class="chart-wrap">
-                <canvas id="latencyChart"></canvas>
+                <canvas id="latencyChart" v-show="detailLogs.length"></canvas>
+
+                <div class="chart-empty" v-if="detailLoading">
+                    Memuat riwayat pengecekan...
+                </div>
+                <div class="chart-empty bad" v-else-if="detailError">
+                    Gagal memuat riwayat: {{ detailError }}
+                </div>
+                <div class="chart-empty" v-else-if="!detailLogs.length">
+                    Belum ada riwayat pengecekan untuk perangkat ini.
+                    Data muncul setelah pemeriksaan berikutnya
+                    (tiap {{ interval }} detik).
+                </div>
+            </div>
+            <div class="chart-note"
+                 v-if="detailLogs.length && detailLogs.every(
+                     l => l.latency === null || l.latency === undefined)">
+                Semua pengecekan terakhir tidak mendapat balasan, sehingga
+                tidak ada nilai latency untuk digambar.
             </div>
             <div class="chart-legend">
                 <span><i class="legend-dot online"></i> Normal</span>
@@ -906,10 +1178,75 @@
         </div>
 
         <div class="modal-actions">
+            <button class="primary-btn" type="button"
+                    @click="openContact(detail)">📞 Hubungi teknisi</button>
             <button class="secondary-btn" type="button"
                     @click="openEdit(detail)">Ubah data</button>
             <button class="secondary-btn" type="button"
                     @click="closeDetail">Tutup</button>
+        </div>
+    </div>
+</div>
+
+<!-- =====================================================
+     MODAL HUBUNGI TEKNISI
+====================================================== -->
+<div class="modal" v-if="contactDevice" @click.self="closeContact">
+    <div class="modal-box" style="max-width:560px">
+        <div class="modal-header">
+            <h2>Hubungi Teknisi</h2>
+            <button class="close-btn" type="button"
+                    @click="closeContact">×</button>
+        </div>
+
+        <div class="device-summary">
+            <div class="label">Perangkat yang bermasalah</div>
+            <div class="device-summary-name">
+                <strong>{{ contactDevice.location }}</strong>
+                <span class="status-badge"
+                      :class="statusClass(contactDevice.status)">
+                    <span class="small-dot"></span>
+                    {{ statusText(contactDevice.status) }}
+                </span>
+            </div>
+            <div class="device-summary-meta">
+                <span class="mono">{{ contactDevice.ip_address }}</span>
+                · {{ contactDevice.place || 'Lokasi fisik belum diisi' }}
+            </div>
+        </div>
+
+        <div v-if="!technicians.length" class="empty-state"
+             style="padding:24px 10px">
+            <div class="empty-icon">👷</div>
+            <h3>Belum ada teknisi</h3>
+            <p>Tambahkan nama dan nomor HP teknisi terlebih dahulu.</p>
+            <button class="primary-btn" type="button"
+                    style="margin-top:16px" @click="goAddTechnician">
+                + Tambah Teknisi
+            </button>
+        </div>
+
+        <div v-else class="contact-list">
+            <div v-for="tech in technicians" :key="tech.id"
+                 class="contact-row">
+                <div>
+                    <div class="cell-main">{{ tech.name }}</div>
+                    <div class="cell-sub mono">{{ tech.phone }}</div>
+                </div>
+                <div class="action-buttons">
+                    <a class="wa-btn"
+                       :href="waLink(tech, contactDevice)"
+                       target="_blank" rel="noopener noreferrer">
+                        💬 WhatsApp
+                    </a>
+                    <a class="secondary-btn small-btn"
+                       :href="telLink(tech)">📞 Telepon</a>
+                </div>
+            </div>
+            <div class="help" style="margin-top:6px">
+                Pesan WhatsApp sudah terisi otomatis dengan nama, IP, lokasi,
+                dan status perangkat.
+            </div>
         </div>
     </div>
 </div>
