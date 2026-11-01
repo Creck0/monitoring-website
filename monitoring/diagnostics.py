@@ -146,8 +146,13 @@ def _stats(logs):
         "offline": offline,
         "slow": slow,
         "streak": streak,
+        # Perangkat dianggap pernah terjangkau bila pernah ada balasan
+        # ping sama sekali (latency terisi), walaupun statusnya OFFLINE
+        # karena packet loss >= 50%.
         "ever_online": any(
-            log["status"] in ("ONLINE", "SLOW") for log in logs
+            log["status"] in ("ONLINE", "SLOW")
+            or log["latency"] is not None
+            for log in logs
         ),
         "avg_latency": (
             round(sum(latencies) / len(latencies), 2)
