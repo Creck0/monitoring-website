@@ -127,6 +127,8 @@ createApp({
 
         const detail = ref(null);
         const detailLogs = ref([]);
+        const detailLoading = ref(false);
+        const detailError = ref("");
         const detailDiagnosis = ref(null);
         const trace = ref(null);
         const tracing = ref(false);
@@ -140,6 +142,29 @@ createApp({
         const convertTitle = ref("");
         const converting = ref(false);
         const dragging = ref(false);
+
+        /* Teknisi */
+        const technicians = ref([]);
+        const showTechForm = ref(false);
+        const editingTech = ref(null);
+        const techForm = ref({ name: "", phone: "" });
+        const savingTech = ref(false);
+        const contactDevice = ref(null);
+
+        /* Bot Telegram */
+        const tg = ref({
+            enabled: false, has_token: false, token_masked: "",
+            token_source: "", chat_id: "",
+            notify_slow: false, notify_recovery: true,
+            repeat_seconds: 30
+        });
+        const tgForm = ref({
+            token: "", chat_id: "", enabled: false,
+            notify_slow: false, notify_recovery: true,
+            repeat_seconds: 30
+        });
+        const tgBusy = ref("");
+        const detectedChats = ref([]);
 
         let chart = null;
         let timer = null;
@@ -276,26 +301,49 @@ createApp({
             detail.value = device;
             detailLogs.value = [];
             detailDiagnosis.value = null;
+            detailError.value = "";
+            detailLoading.value = true;
             trace.value = null;
 
-            try {
-                const [l, diagnosis] = await Promise.all([
-                    api(`/api/devices/${device.id}/logs?limit=60`),
-                    api(`/api/devices/${device.id}/diagnosis`)
-                ]);
-
-                detailLogs.value = l.slice().reverse();
-                detailDiagnosis.value = diagnosis;
-
-                await nextTick();
-                drawChart();
-
-                trace.value = await api(
-                    `/api/devices/${device.id}/trace`
-                ).catch(() => null);
-            } catch (error) {
-                toast(error.message, "error");
+            if (chart) {
+                chart.destroy();
+                chart = null;
             }
+
+            /* Riwayat dan analisa dimuat TERPISAH: kegagalan salah satunya
+               tidak boleh membuat grafik ikut kosong. */
+            const [logsResult, diagnosisResult] = await Promise.allSettled([
+                api(`/api/devices/${device.id}/logs?limit=60`),
+                api(`/api/devices/${device.id}/diagnosis`)
+            ]);
+
+            /* Jendela sudah ditutup / diganti perangkat lain saat memuat */
+            if (!detail.value || detail.value.id !== device.id) return;
+
+            detailLoading.value = false;
+
+            if (logsResult.status === "fulfilled") {
+                detailLogs.value = logsResult.value.slice().reverse();
+                await nextTick();
+                if (detailLogs.value.length) drawChart();
+            } else {
+                detailError.value = logsResult.reason?.message ||
+                    "Terjadi kesalahan pada server.";
+            }
+
+            if (diagnosisResult.status === "fulfilled") {
+                detailDiagnosis.value = diagnosisResult.value;
+            } else {
+                toast(
+                    "Analisa penyebab gagal dimuat: " +
+                    (diagnosisResult.reason?.message || "kesalahan server"),
+                    "error"
+                );
+            }
+
+            trace.value = await api(
+                `/api/devices/${device.id}/trace`
+            ).catch(() => null);
         }
 
         function closeDetail() {
@@ -523,11 +571,232 @@ createApp({
             devices.value.filter(d => d.id !== editing.value)
         );
 
+        /* ---------- Teknisi ---------- */
+
+        async function loadTechnicians() {
+            try {
+                technicians.value = await api("/api/technicians");
+            } catch (error) {
+                toast(error.message, "error");
+            }
+        }
+
+        function sanitizePhone() {
+            /* \D hanya cocok dengan selain 0-9 sehingga huruf, spasi,
+               tanda +/- dan angka non-latin ikut terbuang. */
+            techForm.value.phone = String(techForm.value.phone || "")
+                .replace(/\D/g, "")
+                .slice(0, 15);
+        }
+
+        function onlyDigitsKey(event) {
+            if (event.ctrlKey || event.metaKey || event.altKey) return;
+            if (event.key.length === 1 && !/^[0-9]$/.test(event.key)) {
+                event.preventDefault();
+            }
+        }
+
+        const techFormValid = computed(() =>
+            techForm.value.name.trim().length > 0 &&
+            /^[0-9]{9,15}$/.test(techForm.value.phone)
+        );
+
+        const phoneHint = computed(() => {
+            const length = techForm.value.phone.length;
+            if (!length) return "Hanya angka, 9 sampai 15 digit. Contoh: 081234567890";
+            if (length < 9) return `Kurang ${9 - length} digit lagi (minimal 9 digit).`;
+            return `${length} digit`;
+        });
+
+        function openTechCreate() {
+            editingTech.value = null;
+            techForm.value = { name: "", phone: "" };
+            showTechForm.value = true;
+        }
+
+        function openTechEdit(tech) {
+            editingTech.value = tech.id;
+            techForm.value = { name: tech.name, phone: tech.phone };
+            showTechForm.value = true;
+        }
+
+        async function saveTech() {
+            if (!techFormValid.value || savingTech.value) return;
+            savingTech.value = true;
+
+            try {
+                if (editingTech.value) {
+                    await api(`/api/technicians/${editingTech.value}`, {
+                        method: "PUT", body: techForm.value
+                    });
+                    toast("Data teknisi diperbarui.");
+                } else {
+                    await api("/api/technicians", {
+                        method: "POST", body: techForm.value
+                    });
+                    toast("Teknisi berhasil ditambahkan.");
+                }
+
+                showTechForm.value = false;
+                await loadTechnicians();
+            } catch (error) {
+                toast(error.message, "error");
+            } finally {
+                savingTech.value = false;
+            }
+        }
+
+        async function removeTech(tech) {
+            if (!confirm(`Hapus teknisi "${tech.name}"?`)) return;
+
+            try {
+                await api(`/api/technicians/${tech.id}`, { method: "DELETE" });
+                toast("Teknisi dihapus.");
+                await loadTechnicians();
+            } catch (error) {
+                toast(error.message, "error");
+            }
+        }
+
+        /* ---------- Hubungi teknisi ---------- */
+
+        function contactMessage(device, tech) {
+            const lines = [
+                `Halo ${tech.name}, mohon bantuan penanganan gangguan jaringan.`,
+                "",
+                `Perangkat: ${device.location}`,
+                `IP Address: ${device.ip_address}`,
+                `Lokasi: ${device.place || "belum diisi"}`,
+                `Status: ${statusText(device.status)}`
+            ];
+
+            if (device.latency !== null && device.latency !== undefined) {
+                lines.push(`Latency: ${formatMs(device.latency)}`);
+            }
+            if (device.cause_title) {
+                lines.push(`Dugaan penyebab: ${device.cause_title}`);
+            }
+            if (device.checked_at) {
+                lines.push(`Waktu pengecekan: ${device.checked_at}`);
+            }
+
+            lines.push("", "Terima kasih.");
+            return lines.join("\n");
+        }
+
+        function waLink(tech, device) {
+            return `https://wa.me/${tech.wa_number}?text=` +
+                encodeURIComponent(contactMessage(device, tech));
+        }
+
+        function telLink(tech) {
+            return `tel:+${tech.wa_number}`;
+        }
+
+        async function openContact(device) {
+            if (!device) return;
+            contactDevice.value = device;
+            await loadTechnicians();
+        }
+
+        function closeContact() {
+            contactDevice.value = null;
+        }
+
+        function goAddTechnician() {
+            closeContact();
+            if (detail.value) closeDetail();
+            view.value = "settings";
+            openTechCreate();
+        }
+
+        /* ---------- Bot Telegram ---------- */
+
+        async function loadTelegram() {
+            try {
+                const data = await api("/api/settings/telegram");
+                tg.value = data;
+                tgForm.value = {
+                    token: "",
+                    chat_id: data.chat_id || "",
+                    enabled: data.enabled,
+                    notify_slow: data.notify_slow,
+                    notify_recovery: data.notify_recovery,
+                    repeat_seconds: data.repeat_seconds
+                };
+            } catch (error) {
+                toast(error.message, "error");
+            }
+        }
+
+        async function saveTelegram() {
+            tgBusy.value = "save";
+            try {
+                const data = await api("/api/settings/telegram", {
+                    method: "PUT", body: tgForm.value
+                });
+                tg.value = data;
+                tgForm.value.token = "";
+                toast(data.message || "Pengaturan disimpan.");
+            } catch (error) {
+                toast(error.message, "error");
+            } finally {
+                tgBusy.value = "";
+            }
+        }
+
+        async function testTelegram() {
+            tgBusy.value = "test";
+            try {
+                const data = await api("/api/settings/telegram/test", {
+                    method: "POST",
+                    body: {
+                        token: tgForm.value.token,
+                        chat_id: tgForm.value.chat_id
+                    }
+                });
+                toast(data.message);
+            } catch (error) {
+                toast(error.message, "error");
+            } finally {
+                tgBusy.value = "";
+            }
+        }
+
+        async function detectChat() {
+            tgBusy.value = "detect";
+            detectedChats.value = [];
+            try {
+                const data = await api("/api/settings/telegram/detect", {
+                    method: "POST",
+                    body: { token: tgForm.value.token }
+                });
+
+                if (data.chats.length === 1) {
+                    tgForm.value.chat_id = data.chats[0].id;
+                    toast(`Chat ID ditemukan: ${data.chats[0].name}`);
+                } else {
+                    detectedChats.value = data.chats;
+                    toast("Beberapa chat ditemukan, pilih salah satu.");
+                }
+            } catch (error) {
+                toast(error.message, "error");
+            } finally {
+                tgBusy.value = "";
+            }
+        }
+
+        function pickChat(chat) {
+            tgForm.value.chat_id = chat.id;
+            detectedChats.value = [];
+        }
+
         /* ---------- Lifecycle ---------- */
 
         onMounted(async () => {
             document.documentElement.dataset.theme = theme.value;
             await refresh(false);
+            loadTechnicians();
             timer = setInterval(refresh, 10000);
         });
 
@@ -536,6 +805,10 @@ createApp({
         watch(view, value => {
             if (value === "logs") loadLogs();
             if (value === "report") loadPreview();
+            if (value === "settings") {
+                loadTechnicians();
+                loadTelegram();
+            }
             sidebarOpen.value = false;
         });
 
@@ -550,6 +823,7 @@ createApp({
             view, sidebarOpen, theme, devices, summary, spots, areas, logs,
             toasts, loading, search, logFilter, alertOn, showForm, editing,
             form, detail, detailLogs, detailDiagnosis, trace, tracing,
+            detailLoading, detailError,
             reportDate, reportPreview, reportLoading, convertFile,
             convertTarget, convertTitle, converting, dragging,
             filtered, offlineCount, healthScore, parents,
@@ -557,7 +831,13 @@ createApp({
             refresh, loadLogs, openCreate, openEdit, saveDevice,
             removeDevice, openDetail, closeDetail, runTrace, loadPreview,
             download, pickFile, dropFile, runConvert, toggleTheme,
-            toggleAlert, toast
+            toggleAlert, toast,
+            technicians, showTechForm, editingTech, techForm, savingTech,
+            techFormValid, phoneHint, contactDevice, tg, tgForm, tgBusy,
+            detectedChats, loadTechnicians, sanitizePhone, onlyDigitsKey,
+            openTechCreate, openTechEdit, saveTech, removeTech,
+            waLink, telLink, openContact, closeContact, goAddTechnician,
+            loadTelegram, saveTelegram, testTelegram, detectChat, pickChat
         };
     }
 }).mount("#app");
