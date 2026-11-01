@@ -35,8 +35,8 @@ from monitoring.monitor import MONITOR_INTERVAL, monitoring_loop
 from monitoring.pinger import LATENCY_NORMAL, LATENCY_SLOW
 from monitoring.tracer import last_trace, trace_device
 
-HOST = "127.0.0.1"
-PORT = 5000
+HOST = "0.0.0.0"
+PORT = 80
 
 app = Flask(__name__)
 
