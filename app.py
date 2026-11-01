@@ -28,7 +28,7 @@ from flask import (
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from monitoring import reports
+from monitoring import contacts, notifier, reports
 from monitoring.db import current_time, get_db, init_database
 from monitoring.diagnostics import area_summary, diagnose, hotspots
 from monitoring.monitor import MONITOR_INTERVAL, monitoring_loop
@@ -734,6 +734,175 @@ def convert_file():
         return response
 
     return jsonify({"error": "Format tujuan tidak dikenal."}), 400
+
+
+# =========================================================
+# API - TEKNISI
+# =========================================================
+@app.route("/api/technicians", methods=["GET"])
+@login_required
+def get_technicians():
+    connection = get_db()
+    result = contacts.list_technicians(connection)
+    connection.close()
+    return jsonify(result)
+
+
+@app.route("/api/technicians", methods=["POST"])
+@login_required
+def add_technician():
+    name, phone, error = contacts.validate_technician(
+        request.get_json(silent=True) or {}
+    )
+    if error:
+        return jsonify({"error": error}), 400
+
+    connection = get_db()
+    if contacts.is_duplicate(connection, phone):
+        connection.close()
+        return jsonify({
+            "error": "No. HP tersebut sudah terdaftar."
+        }), 400
+
+    technician_id = contacts.create_technician(connection, name, phone)
+    connection.close()
+    return jsonify({
+        "message": "Teknisi berhasil ditambahkan.",
+        "id": technician_id,
+    }), 201
+
+
+@app.route("/api/technicians/<int:technician_id>", methods=["PUT"])
+@login_required
+def update_technician(technician_id):
+    name, phone, error = contacts.validate_technician(
+        request.get_json(silent=True) or {}
+    )
+    if error:
+        return jsonify({"error": error}), 400
+
+    connection = get_db()
+    if contacts.is_duplicate(connection, phone, ignore_id=technician_id):
+        connection.close()
+        return jsonify({
+            "error": "No. HP tersebut sudah terdaftar."
+        }), 400
+
+    cursor = connection.execute(
+        "UPDATE technicians SET name = ?, phone = ? WHERE id = ?",
+        (name, phone, technician_id),
+    )
+    if cursor.rowcount == 0:
+        connection.close()
+        return jsonify({"error": "Teknisi tidak ditemukan."}), 404
+
+    connection.commit()
+    connection.close()
+    return jsonify({"message": "Data teknisi berhasil diperbarui."})
+
+
+@app.route("/api/technicians/<int:technician_id>", methods=["DELETE"])
+@login_required
+def delete_technician(technician_id):
+    connection = get_db()
+    cursor = connection.execute(
+        "DELETE FROM technicians WHERE id = ?", (technician_id,)
+    )
+    if cursor.rowcount == 0:
+        connection.close()
+        return jsonify({"error": "Teknisi tidak ditemukan."}), 404
+
+    connection.commit()
+    connection.close()
+    return jsonify({"message": "Teknisi berhasil dihapus."})
+
+
+# =========================================================
+# API - BOT TELEGRAM
+# =========================================================
+@app.route("/api/settings/telegram", methods=["GET"])
+@login_required
+def get_telegram_settings():
+    connection = get_db()
+    result = notifier.public_config(connection)
+    connection.close()
+    return jsonify(result)
+
+
+@app.route("/api/settings/telegram", methods=["PUT"])
+@login_required
+def save_telegram_settings():
+    connection = get_db()
+    error = notifier.save_config(
+        connection, request.get_json(silent=True) or {}
+    )
+    if error:
+        connection.close()
+        return jsonify({"error": error}), 400
+
+    result = notifier.public_config(connection)
+    connection.close()
+    result["message"] = "Pengaturan Telegram disimpan."
+    return jsonify(result)
+
+
+def _credentials_from_request():
+    """Ambil token/chat id dari form; kalau kosong pakai yang tersimpan."""
+    data = request.get_json(silent=True) or {}
+    token = str(data.get("token") or "").strip()
+    chat_id = str(data.get("chat_id") or "").strip()
+
+    if token and not notifier.TOKEN_PATTERN.fullmatch(token):
+        return None, None, notifier.TOKEN_ERROR
+    if chat_id and not notifier.CHAT_ID_PATTERN.fullmatch(chat_id):
+        return None, None, notifier.CHAT_ID_ERROR
+
+    connection = get_db()
+    saved = notifier.load_config(connection)
+    connection.close()
+
+    return (token or saved["token"]), (chat_id or saved["chat_id"]), None
+
+
+@app.route("/api/settings/telegram/test", methods=["POST"])
+@login_required
+def test_telegram():
+    token, chat_id, error = _credentials_from_request()
+    if error:
+        return jsonify({"error": error}), 400
+    if not token:
+        return jsonify({"error": "Isi token bot terlebih dahulu."}), 400
+    if not chat_id:
+        return jsonify({"error": "Isi Chat ID terlebih dahulu."}), 400
+
+    ok, message = notifier.send_message(
+        token, chat_id, notifier.build_test_message()
+    )
+    if not ok:
+        return jsonify({"error": message}), 400
+    return jsonify({"message": "Pesan tes terkirim. Periksa Telegram Anda."})
+
+
+@app.route("/api/settings/telegram/detect", methods=["POST"])
+@login_required
+def detect_telegram_chat():
+    token, _, error = _credentials_from_request()
+    if error:
+        return jsonify({"error": error}), 400
+    if not token:
+        return jsonify({"error": "Isi token bot terlebih dahulu."}), 400
+
+    chats, error = notifier.detect_chats(token)
+    if error:
+        return jsonify({"error": error}), 400
+    if not chats:
+        return jsonify({
+            "error": (
+                "Belum ada pesan masuk ke bot. Buka bot di Telegram, "
+                "tekan Start (atau kirim pesan apa saja), lalu coba lagi."
+            )
+        }), 404
+    return jsonify({"chats": chats})
 
 
 # =========================================================
