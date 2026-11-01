@@ -32,17 +32,75 @@ from monitoring import contacts, notifier, reports
 from monitoring.db import current_time, get_db, init_database
 from monitoring.diagnostics import area_summary, diagnose, hotspots
 from monitoring.monitor import MONITOR_INTERVAL, monitoring_loop
-from monitoring.pinger import LATENCY_NORMAL, LATENCY_SLOW
+from monitoring.pinger import LATENCY_NORMAL, LATENCY_SLOW, is_valid_ip
 from monitoring.tracer import last_trace, trace_device
 
-HOST = "0.0.0.0"
-PORT = 80
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Alamat & port server. Bisa diubah lewat environment variable:
+#   NETMON_HOST (default 0.0.0.0), NETMON_PORT (default 5000).
+# Port 80 butuh hak root; sebaiknya pakai port tinggi di belakang Nginx.
+HOST = os.environ.get("NETMON_HOST", "0.0.0.0")
+
+try:
+    PORT = int(os.environ.get("NETMON_PORT", "80"))
+except ValueError:
+    PORT = 80
+
+
+def _load_secret_key():
+    """
+    Kunci penanda sesi login.
+    Urutan: environment SECRET_KEY -> file secret.key -> buat baru.
+    Disimpan ke file agar sesi login tidak hilang saat server restart.
+    """
+
+    env_key = os.environ.get("SECRET_KEY", "").strip()
+
+    if env_key:
+        return env_key
+
+    key_file = os.path.join(BASE_DIR, "secret.key")
+
+    try:
+        with open(key_file, "r", encoding="utf-8") as handle:
+            stored = handle.read().strip()
+
+        if stored:
+            return stored
+
+    except OSError:
+        pass
+
+    generated = secrets.token_hex(32)
+
+    try:
+        descriptor = os.open(
+            key_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600
+        )
+
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(generated)
+
+    except OSError as error:
+        print(f"[PERINGATAN] secret.key tidak dapat disimpan: {error}")
+
+    return generated
+
 
 app = Flask(__name__)
 
-app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
+app.secret_key = _load_secret_key()
 app.config["PERMANENT_SESSION_LIFETIME"] = 8 * 60 * 60
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+
+# Aktifkan (COOKIE_SECURE=1) hanya bila dashboard diakses lewat HTTPS.
+app.config["SESSION_COOKIE_SECURE"] = (
+    os.environ.get("COOKIE_SECURE", "").strip().lower()
+    in ("1", "true", "yes")
+)
 
 
 # =========================================================
@@ -193,18 +251,55 @@ DEVICE_FIELDS = (
 )
 
 
+def _json_body():
+    """Ambil body JSON; selalu mengembalikan dict (aman dari input aneh)."""
+
+    data = request.get_json(silent=True)
+
+    return data if isinstance(data, dict) else {}
+
+
 def _clean_payload(data):
+    """Bersihkan input perangkat. Melempar ValueError bila ada yang salah."""
+
     payload = {}
 
     for field in DEVICE_FIELDS:
         value = data.get(field)
 
         if field == "parent_id":
-            payload[field] = int(value) if value else None
+            try:
+                payload[field] = int(value) if value else None
+            except (TypeError, ValueError):
+                raise ValueError("Perangkat induk tidak valid.")
         else:
-            payload[field] = (value or "").strip()
+            payload[field] = str(value if value is not None else "").strip()
 
     return payload
+
+
+def _validate_device(connection, payload):
+    """Kembalikan pesan error (str) bila input tidak sah, atau None."""
+
+    if not payload["location"]:
+        return "Nama/lokasi wajib diisi."
+
+    if not payload["ip_address"]:
+        return "IP Address wajib diisi."
+
+    if not is_valid_ip(payload["ip_address"]):
+        return "Format IP Address tidak valid. Contoh: 192.168.1.10"
+
+    if payload["parent_id"] is not None:
+        parent = connection.execute(
+            "SELECT id FROM devices WHERE id = ?",
+            (payload["parent_id"],),
+        ).fetchone()
+
+        if parent is None:
+            return "Perangkat induk yang dipilih tidak ditemukan."
+
+    return None
 
 
 def _serialize(row):
@@ -260,15 +355,18 @@ def get_devices():
 @app.route("/api/devices", methods=["POST"])
 @login_required
 def add_device():
-    payload = _clean_payload(request.get_json() or {})
-
-    if not payload["location"]:
-        return jsonify({"error": "Nama/lokasi wajib diisi."}), 400
-
-    if not payload["ip_address"]:
-        return jsonify({"error": "IP Address wajib diisi."}), 400
+    try:
+        payload = _clean_payload(_json_body())
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
 
     connection = get_db()
+
+    problem = _validate_device(connection, payload)
+
+    if problem:
+        connection.close()
+        return jsonify({"error": problem}), 400
 
     try:
         cursor = connection.cursor()
@@ -302,13 +400,10 @@ def add_device():
 @app.route("/api/devices/<int:device_id>", methods=["PUT"])
 @login_required
 def update_device(device_id):
-    payload = _clean_payload(request.get_json() or {})
-
-    if not payload["location"]:
-        return jsonify({"error": "Nama/lokasi wajib diisi."}), 400
-
-    if not payload["ip_address"]:
-        return jsonify({"error": "IP Address wajib diisi."}), 400
+    try:
+        payload = _clean_payload(_json_body())
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
 
     if payload["parent_id"] == device_id:
         return jsonify({
@@ -316,6 +411,12 @@ def update_device(device_id):
         }), 400
 
     connection = get_db()
+
+    problem = _validate_device(connection, payload)
+
+    if problem:
+        connection.close()
+        return jsonify({"error": problem}), 400
 
     try:
         cursor = connection.cursor()
@@ -933,4 +1034,17 @@ if __name__ == "__main__":
     print("Tekan CTRL+C untuk menghentikan server.")
     print("")
 
-    app.run(host=HOST, port=PORT, debug=False, threaded=True)
+    # Gunakan server produksi (waitress) bila tersedia. Waitress berjalan
+    # dalam SATU proses, sehingga thread monitoring tidak terduplikasi.
+    # Bila belum terpasang, kembali ke server bawaan Flask.
+    try:
+        from waitress import serve
+    except ImportError:
+        serve = None
+
+    if serve is not None:
+        print("[SERVER] Menggunakan waitress (produksi).")
+        serve(app, host=HOST, port=PORT, threads=8)
+    else:
+        print("[SERVER] waitress belum terpasang, memakai server Flask bawaan.")
+        app.run(host=HOST, port=PORT, debug=False, threaded=True)
