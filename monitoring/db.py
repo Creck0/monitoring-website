@@ -78,6 +78,20 @@ SCHEMA = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS technicians (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        name        TEXT NOT NULL,
+        phone       TEXT NOT NULL,
+        created_at  TEXT
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS settings (
+        key    TEXT PRIMARY KEY,
+        value  TEXT
+    )
+    """,
+    """
     CREATE INDEX IF NOT EXISTS idx_logs_device_time
     ON monitoring_logs(device_id, checked_at)
     """,
